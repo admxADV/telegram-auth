@@ -108,10 +108,14 @@ function setupBotHandlers() {
             last_name: msg.from.last_name
         };
 
-        console.log(`Получена команда /start от пользователя ${userId} (@${userData.username}) с токеном ${authToken}`);
+        console.log(`🔔 Получена команда /start от пользователя ${userId} (@${userData.username}) с токеном ${authToken}`);
+        console.log(`🔧 WEBAPP_URL: ${WEBAPP_URL}`);
+        console.log(`🔧 NODE_ENV: ${process.env.NODE_ENV || 'not set'}`);
 
         try {
+            console.log(`📤 Отправка данных на сервер для авторизации...`);
             const result = await sendAuthToServer(userId, authToken, userData);
+            console.log(`📥 Результат авторизации:`, result);
 
             if (result.success) {
                 await bot.sendMessage(chatId,
@@ -156,12 +160,24 @@ function setupBotHandlers() {
         );
     });
 
-    console.log('Telegram бот запущен (@pavepobot)');
+    console.log('✅ Telegram бот запущен (@pavepobot)');
 }
 
 if (TELEGRAM_BOT_TOKEN) {
+    console.log('🔧 Инициализация Telegram бота...');
+    console.log('🔧 TELEGRAM_BOT_TOKEN:', TELEGRAM_BOT_TOKEN ? 'задан (длина: ' + TELEGRAM_BOT_TOKEN.length + ')' : 'НЕ задан');
+    
     bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: true });
+    
+    bot.on('polling_error', (error) => {
+        console.error('❌ [Polling Error]:', error.code, error.message);
+    });
+    
     setupBotHandlers();
+    
+    console.log('✅ Бот успешно инициализирован');
+} else {
+    console.warn('⚠️ TELEGRAM_BOT_TOKEN не задан, бот не будет работать');
 }
 
 /**
@@ -178,18 +194,41 @@ async function sendAuthToServer(userId, authToken, userData) {
             timestamp: Date.now()
         });
 
-        const options = {
-            hostname: 'localhost',
-            port: PORT,
-            path: '/api/auth/verify',
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Content-Length': Buffer.byteLength(data)
-            }
-        };
+        // Используем WEBAPP_URL если задан (для production), иначе localhost
+        const isProduction = process.env.NODE_ENV === 'production' && WEBAPP_URL;
+        let options;
 
-        const req = http.request(options, (res) => {
+        if (isProduction) {
+            // Для production - используем внешний URL
+            const url = new URL(WEBAPP_URL);
+            options = {
+                hostname: url.hostname,
+                port: url.port || (url.protocol === 'https:' ? 443 : 80),
+                path: '/api/auth/verify',
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(data)
+                }
+            };
+            // Для HTTPS нужно использовать https модуль
+        } else {
+            // Для локальной разработки
+            options = {
+                hostname: 'localhost',
+                port: PORT,
+                path: '/api/auth/verify',
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(data)
+                }
+            };
+        }
+
+        // В production используем https модуль
+        const requestModule = (isProduction && WEBAPP_URL.startsWith('https')) ? require('https') : http;
+        const req = requestModule.request(options, (res) => {
             let responseData = '';
             res.on('data', (chunk) => { responseData += chunk; });
             res.on('end', () => {
@@ -198,9 +237,14 @@ async function sendAuthToServer(userId, authToken, userData) {
             });
         });
 
-        req.on('error', reject);
+        req.on('error', (error) => {
+            console.error(`❌ [sendAuthToServer] Ошибка запроса:`, error.message);
+            reject(error);
+        });
         req.write(data);
         req.end();
+        
+        console.log(`📤 [sendAuthToServer] Запрос отправлен на ${options.hostname}:${options.port}${options.path}`);
     });
 }
 
@@ -289,7 +333,8 @@ async function handleAuthAPI(req, res) {
                 const data = JSON.parse(body);
                 const { user_id, auth_token, username, first_name, last_name } = data;
 
-                console.log(`Получен запрос авторизации: user_id=${user_id}, token=${auth_token}`);
+                console.log(`🔔 [API] Получен запрос авторизации: user_id=${user_id}, token=${auth_token}`);
+                console.log(`🔔 [API] Данные пользователя: username=${username}, first_name=${first_name}, last_name=${last_name}`);
 
                 if (auth_token && auth_token.startsWith('auth_')) {
                     await pool.query(`
@@ -648,15 +693,22 @@ function handleRequest(req, res) {
 
 // Инициализация и запуск сервера
 async function startServer() {
+    console.log('🔧 Запуск сервера...');
+    console.log('🔧 NODE_ENV:', process.env.NODE_ENV || 'not set');
+    console.log('🔧 PORT:', process.env.PORT || PORT);
+    console.log('🔧 DATABASE_URL:', process.env.DATABASE_URL ? 'задан' : 'НЕ задан');
+    console.log('🔧 WEBAPP_URL:', process.env.WEBAPP_URL || 'not set');
+    
     await initDatabase();
 
     const server = http.createServer(handleRequest);
 
     server.listen(PORT, () => {
+        const actualUrl = process.env.WEBAPP_URL || `http://localhost:${PORT}`;
         console.log('='.repeat(50));
-        console.log('Сервер авторизации запущен!');
+        console.log('✅ Сервер авторизации запущен!');
         console.log('='.repeat(50));
-        console.log('URL: http://localhost:' + PORT);
+        console.log('URL:', actualUrl);
         console.log('Остановить: Ctrl+C');
         console.log('='.repeat(50));
     });
