@@ -716,15 +716,17 @@ async function startServer() {
     console.log('🔧 Запуск сервера...');
     console.log('🔧 NODE_ENV:', process.env.NODE_ENV || 'not set');
     console.log('🔧 PORT:', process.env.PORT || PORT);
-    console.log('🔧 DATABASE_URL:', process.env.DATABASE_URL ? 'задан' : 'НЕ задан');
+    console.log('🔧 DATABASE_URL:', process.env.DATABASE_URL ? 'задан (длина: ' + process.env.DATABASE_URL.length + ')' : 'НЕ задан');
     console.log('🔧 WEBAPP_URL:', process.env.WEBAPP_URL || 'not set');
-    
+
     await initDatabase();
 
     const server = http.createServer(handleRequest);
 
-    server.listen(PORT, () => {
-        const actualUrl = process.env.WEBAPP_URL || `http://localhost:${PORT}`;
+    // Render устанавливает PORT, используем его вместо локальной константы
+    const listenPort = process.env.PORT || PORT;
+    server.listen(listenPort, '0.0.0.0', () => {
+        const actualUrl = process.env.WEBAPP_URL || `http://localhost:${listenPort}`;
         console.log('='.repeat(50));
         console.log('✅ Сервер авторизации запущен!');
         console.log('='.repeat(50));
