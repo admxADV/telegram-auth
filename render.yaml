@@ -14,6 +14,11 @@ services:
           name: pavepo-auth
           type: web
           envVarKey: RENDER_EXTERNAL_URL
+      - key: DATABASE_URL
+        fromService:
+          name: pavepo-db
+          type: postgres
+          envVarKey: DATABASE_URL
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: ADMIN_USER_ID
