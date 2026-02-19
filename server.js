@@ -1,0 +1,661 @@
+/**
+ * Сервер для авторизации через Telegram бота + профили пользователей
+ * Версия для Render.com с PostgreSQL
+ */
+
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const { Pool } = require('pg');
+const TelegramBot = require('node-telegram-bot-api');
+
+const PORT = process.env.PORT || 3000;
+const STATIC_DIR = path.join(__dirname, 'src');
+
+// ID администратора
+const ADMIN_USER_ID = parseInt(process.env.ADMIN_USER_ID) || 5093303797;
+
+// Инициализация PostgreSQL
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
+
+// Инициализация таблиц
+async function initDatabase() {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                telegram_id BIGINT UNIQUE NOT NULL,
+                username TEXT,
+                first_name TEXT,
+                last_name TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS profiles (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER UNIQUE NOT NULL REFERENCES users(id),
+                company TEXT,
+                department TEXT,
+                job_title TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS business_processes (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER UNIQUE NOT NULL REFERENCES users(id),
+                main_tasks TEXT,
+                work_process TEXT,
+                systems_used TEXT,
+                process_description TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS quiz_questions (
+                id SERIAL PRIMARY KEY,
+                department TEXT NOT NULL,
+                question_number INTEGER NOT NULL,
+                question_text TEXT NOT NULL,
+                question_type TEXT DEFAULT 'choice',
+                options TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS quiz_answers (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                question_id INTEGER NOT NULL REFERENCES quiz_questions(id),
+                answer_text TEXT,
+                comment_text TEXT,
+                answered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        console.log('База данных инициализирована');
+    } catch (error) {
+        console.error('Ошибка инициализации БД:', error);
+    }
+}
+
+// Хранилище сессий в памяти
+const authSessions = new Map();
+
+// Инициализация Telegram бота
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+let bot = null;
+
+if (TELEGRAM_BOT_TOKEN) {
+    bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: true });
+
+    bot.onText(/\/start (.+)/, async (msg, match) => {
+        const chatId = msg.chat.id;
+        const userId = msg.from.id;
+        const authToken = match[1];
+
+        const userData = {
+            username: msg.from.username,
+            first_name: msg.from.first_name,
+            last_name: msg.from.last_name
+        };
+
+        console.log(`Получена команда /start от пользователя ${userId} (@${userData.username}) с токеном ${authToken}`);
+
+        try {
+            const result = await sendAuthToServer(userId, authToken, userData);
+
+            if (result.success) {
+                await bot.sendMessage(chatId,
+                    '✅ *Авторизация успешна!*\n\n' +
+                    'Возвращайтесь на сайт.',
+                    { parse_mode: 'Markdown' }
+                );
+                console.log(`Пользователь ${userId} (@${userData.username}) успешно авторизован`);
+            } else {
+                await bot.sendMessage(chatId,
+                    '❌ *Ошибка авторизации*\n\n' +
+                    'Попробуйте войти через сайт ещё раз.',
+                    { parse_mode: 'Markdown' }
+                );
+            }
+        } catch (error) {
+            console.error('Ошибка при отправке на сервер:', error);
+            await bot.sendMessage(chatId,
+                '❌ *Произошла ошибка*\n\n' +
+                'Попробуйте позже.',
+                { parse_mode: 'Markdown' }
+            );
+        }
+    });
+
+    bot.onText(/\/start$/, (msg) => {
+        const chatId = msg.chat.id;
+        bot.sendMessage(chatId,
+            '👋 *Добро пожаловать в PAVEPO!*\n\n' +
+            'Для авторизации нажмите кнопку "Войти через Telegram" на сайте.',
+            { parse_mode: 'Markdown' }
+        );
+    });
+
+    bot.on('message', (msg) => {
+        if (msg.text && msg.text.startsWith('/')) return;
+        const chatId = msg.chat.id;
+        bot.sendMessage(chatId,
+            '📩 *PAVEPO Bot*\n\n' +
+            'Для авторизации перейдите на сайт и нажмите "Войти через Telegram".',
+            { parse_mode: 'Markdown' }
+        );
+    });
+
+    console.log('Telegram бот запущен (@pavepobot)');
+}
+
+/**
+ * Отправляет данные авторизации на сервер
+ */
+async function sendAuthToServer(userId, authToken, userData) {
+    return new Promise((resolve, reject) => {
+        const data = JSON.stringify({
+            user_id: userId,
+            auth_token: authToken,
+            username: userData.username || null,
+            first_name: userData.first_name || null,
+            last_name: userData.last_name || null,
+            timestamp: Date.now()
+        });
+
+        const options = {
+            hostname: 'localhost',
+            port: PORT,
+            path: '/api/auth/verify',
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(data)
+            }
+        };
+
+        const req = http.request(options, (res) => {
+            let responseData = '';
+            res.on('data', (chunk) => { responseData += chunk; });
+            res.on('end', () => {
+                try { resolve(JSON.parse(responseData)); }
+                catch (e) { resolve({ success: false, error: 'Invalid response' }); }
+            });
+        });
+
+        req.on('error', reject);
+        req.write(data);
+        req.end();
+    });
+}
+
+// MIME-типы
+const MIME_TYPES = {
+    '.html': 'text/html',
+    '.css': 'text/css',
+    '.js': 'application/javascript',
+    '.json': 'application/json',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.svg': 'image/svg+xml',
+    '.ico': 'image/x-icon'
+};
+
+function getMimeType(filePath) {
+    const ext = path.extname(filePath).toLowerCase();
+    return MIME_TYPES[ext] || 'application/octet-stream';
+}
+
+function serveStatic(req, res) {
+    try {
+        let filePath = req.url.split('?')[0];
+        if (filePath === '/') filePath = '/index.html';
+        const fullPath = path.join(STATIC_DIR, filePath);
+
+        if (!fs.existsSync(fullPath)) {
+            res.writeHead(404, { 'Content-Type': 'text/html' });
+            res.end('<h1>404 - Файл не найден</h1>');
+            return;
+        }
+
+        const content = fs.readFileSync(fullPath);
+        const mimeType = getMimeType(fullPath);
+
+        res.writeHead(200, { 'Content-Type': mimeType, 'Cache-Control': 'no-cache' });
+        res.end(content);
+    } catch (error) {
+        console.error('Ошибка при обработке статики:', error);
+        res.writeHead(500, { 'Content-Type': 'text/html' });
+        res.end('<h1>500 - Ошибка сервера</h1>');
+    }
+}
+
+function handleAuthAPI(req, res) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    if (req.method === 'OPTIONS') {
+        res.writeHead(200);
+        res.end();
+        return;
+    }
+
+    // Проверка авторизации
+    if (req.method === 'GET' && req.url.startsWith('/api/auth/check/')) {
+        const token = req.url.split('/api/auth/check/')[1];
+        const session = authSessions.get(token);
+
+        if (session && session.authorized) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                success: true,
+                authorized: true,
+                user_id: session.user_id,
+                username: session.username,
+                first_name: session.first_name,
+                last_name: session.last_name
+            }));
+        } else {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true, authorized: false }));
+        }
+        return;
+    }
+
+    // Верификация авторизации от бота
+    if (req.method === 'POST' && req.url === '/api/auth/verify') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', async () => {
+            try {
+                const data = JSON.parse(body);
+                const { user_id, auth_token, username, first_name, last_name } = data;
+
+                console.log(`Получен запрос авторизации: user_id=${user_id}, token=${auth_token}`);
+
+                if (auth_token && auth_token.startsWith('auth_')) {
+                    await pool.query(`
+                        INSERT INTO users (telegram_id, username, first_name, last_name)
+                        VALUES ($1, $2, $3, $4)
+                        ON CONFLICT (telegram_id) DO UPDATE SET
+                            username = EXCLUDED.username,
+                            first_name = EXCLUDED.first_name,
+                            last_name = EXCLUDED.last_name
+                    `, [user_id, username, first_name, last_name]);
+
+                    authSessions.set(auth_token, {
+                        user_id: user_id,
+                        username: username,
+                        first_name: first_name,
+                        last_name: last_name,
+                        authorized: true,
+                        timestamp: Date.now()
+                    });
+
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: true,
+                        message: 'Авторизация успешна',
+                        user_id: user_id,
+                        username: username,
+                        first_name: first_name
+                    }));
+
+                    console.log(`Авторизация подтверждена для user_id=${user_id}, username=@${username}`);
+                } else {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'Неверный токен' }));
+                }
+            } catch (error) {
+                console.error('Ошибка при обработке авторизации:', error);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: 'Ошибка сервера' }));
+            }
+        });
+        return;
+    }
+
+    // Получение всех пользователей (админ)
+    if (req.method === 'GET' && req.url === '/api/admin/users') {
+        const token = req.headers.authorization || req.url.split('token=')[1]?.split('&')[0];
+        let isAdmin = false;
+        const tokenToCheck = token ? token.replace('Bearer ', '') : null;
+
+        if (tokenToCheck && authSessions.has(tokenToCheck)) {
+            const session = authSessions.get(tokenToCheck);
+            if (session.user_id === ADMIN_USER_ID) isAdmin = true;
+        }
+
+        if (!isAdmin) {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Доступ запрещен' }));
+            return;
+        }
+
+        try {
+            const result = await pool.query(`
+                SELECT u.telegram_id, u.username, u.first_name, u.last_name, u.created_at,
+                       p.company, p.department, p.job_title,
+                       bp.main_tasks, bp.work_process, bp.systems_used, bp.process_description
+                FROM users u
+                LEFT JOIN profiles p ON u.id = p.user_id
+                LEFT JOIN business_processes bp ON u.id = bp.user_id
+                ORDER BY u.created_at DESC
+            `);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ users: result.rows }));
+        } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Ошибка базы данных' }));
+        }
+        return;
+    }
+
+    // Получение профиля
+    if (req.method === 'GET' && req.url.startsWith('/api/profile/')) {
+        const userId = req.url.split('/api/profile/')[1];
+
+        try {
+            const result = await pool.query(`
+                SELECT u.telegram_id, u.username, u.first_name, u.last_name,
+                       p.company, p.department, p.job_title
+                FROM users u
+                LEFT JOIN profiles p ON u.id = p.user_id
+                WHERE u.telegram_id = $1
+            `, [userId]);
+
+            const row = result.rows[0];
+            if (row) {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    success: true,
+                    profile: {
+                        company: row.company,
+                        department: row.department,
+                        jobTitle: row.job_title
+                    }
+                }));
+            } else {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, profile: null }));
+            }
+        } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Ошибка базы данных' }));
+        }
+        return;
+    }
+
+    // Сохранение профиля
+    if (req.method === 'POST' && req.url === '/api/profile') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', async () => {
+            try {
+                const data = JSON.parse(body);
+                const { user_id, company, department, job_title } = data;
+
+                console.log(`Сохранение профиля: user_id=${user_id}, company=${company}, department=${department}, job=${job_title}`);
+
+                const userResult = await pool.query('SELECT id FROM users WHERE telegram_id = $1', [user_id]);
+                if (userResult.rows.length === 0) {
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'Пользователь не найден' }));
+                    return;
+                }
+
+                const internalId = userResult.rows[0].id;
+
+                await pool.query(`
+                    INSERT INTO profiles (user_id, company, department, job_title, updated_at)
+                    VALUES ($1, $2, $3, $4, NOW())
+                    ON CONFLICT (user_id) DO UPDATE SET
+                        company = EXCLUDED.company,
+                        department = EXCLUDED.department,
+                        job_title = EXCLUDED.job_title,
+                        updated_at = NOW()
+                `, [internalId, company, department, job_title]);
+
+                console.log('Профиль сохранён для user_id=' + user_id);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true }));
+            } catch (error) {
+                console.error('Ошибка при сохранении профиля:', error);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: 'Ошибка сервера' }));
+            }
+        });
+        return;
+    }
+
+    // Получение бизнес-процесса
+    if (req.method === 'GET' && req.url.startsWith('/api/business-process/')) {
+        const userId = req.url.split('/api/business-process/')[1];
+
+        try {
+            const userResult = await pool.query('SELECT id FROM users WHERE telegram_id = $1', [userId]);
+            if (userResult.rows.length === 0) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Ошибка базы данных' }));
+                return;
+            }
+
+            const internalId = userResult.rows[0].id;
+            const result = await pool.query('SELECT * FROM business_processes WHERE user_id = $1', [internalId]);
+
+            if (result.rows[0]) {
+                const row = result.rows[0];
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    success: true,
+                    process: {
+                        mainTasks: row.main_tasks,
+                        workProcess: row.work_process,
+                        systemsUsed: row.systems_used,
+                        processDescription: row.process_description
+                    }
+                }));
+            } else {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, process: null }));
+            }
+        } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Ошибка базы данных' }));
+        }
+        return;
+    }
+
+    // Сохранение бизнес-процесса
+    if (req.method === 'POST' && req.url === '/api/business-process') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', async () => {
+            try {
+                const data = JSON.parse(body);
+                const { user_id, main_tasks, work_process, systems_used, process_description } = data;
+
+                const userResult = await pool.query('SELECT id FROM users WHERE telegram_id = $1', [user_id]);
+                if (userResult.rows.length === 0) {
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'Пользователь не найден' }));
+                    return;
+                }
+
+                const internalId = userResult.rows[0].id;
+
+                await pool.query(`
+                    INSERT INTO business_processes
+                    (user_id, main_tasks, work_process, systems_used, process_description, updated_at)
+                    VALUES ($1, $2, $3, $4, $5, NOW())
+                    ON CONFLICT (user_id) DO UPDATE SET
+                        main_tasks = EXCLUDED.main_tasks,
+                        work_process = EXCLUDED.work_process,
+                        systems_used = EXCLUDED.systems_used,
+                        process_description = EXCLUDED.process_description,
+                        updated_at = NOW()
+                `, [internalId, main_tasks, work_process, systems_used, process_description]);
+
+                console.log('Бизнес-процесс сохранён для user_id=' + user_id);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true }));
+            } catch (error) {
+                console.error('Ошибка при сохранении бизнес-процесса:', error);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: 'Ошибка сервера' }));
+            }
+        });
+        return;
+    }
+
+    // Получение списка вопросов для отдела
+    if (req.method === 'GET' && req.url.startsWith('/api/quiz/questions/')) {
+        const department = req.url.split('/api/quiz/questions/')[1];
+
+        try {
+            const result = await pool.query(`
+                SELECT id, question_number, question_text, question_type, options
+                FROM quiz_questions
+                WHERE department = $1
+                ORDER BY question_number ASC
+            `, [department]);
+
+            const questions = result.rows.map(row => ({
+                ...row,
+                options: row.options ? JSON.parse(row.options) : null
+            }));
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true, questions }));
+        } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Ошибка базы данных' }));
+        }
+        return;
+    }
+
+    // Сохранение ответа на вопрос
+    if (req.method === 'POST' && req.url === '/api/quiz/answer') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', async () => {
+            try {
+                const data = JSON.parse(body);
+                const { user_id, question_id, answer_text, comment_text } = data;
+
+                const userResult = await pool.query('SELECT id FROM users WHERE telegram_id = $1', [user_id]);
+                if (userResult.rows.length === 0) {
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, error: 'Пользователь не найден' }));
+                    return;
+                }
+
+                const internalId = userResult.rows[0].id;
+
+                await pool.query(`
+                    INSERT INTO quiz_answers (user_id, question_id, answer_text, comment_text, answered_at)
+                    VALUES ($1, $2, $3, $4, NOW())
+                    ON CONFLICT (user_id, question_id) DO UPDATE SET
+                        answer_text = EXCLUDED.answer_text,
+                        comment_text = EXCLUDED.comment_text,
+                        answered_at = NOW()
+                `, [internalId, question_id, answer_text, comment_text]);
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true }));
+            } catch (error) {
+                console.error('Ошибка при сохранении ответа:', error);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: 'Ошибка сервера' }));
+            }
+        });
+        return;
+    }
+
+    // Получение ответов пользователя (для админки)
+    if (req.method === 'GET' && req.url.startsWith('/api/admin/quiz-answers/')) {
+        const token = req.headers.authorization || req.url.split('token=')[1]?.split('&')[0];
+        let isAdmin = false;
+        if (token && authSessions.has(token.replace('Bearer ', ''))) {
+            const session = authSessions.get(token.replace('Bearer ', ''));
+            if (session.user_id === ADMIN_USER_ID) isAdmin = true;
+        }
+
+        if (!isAdmin) {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Доступ запрещен' }));
+            return;
+        }
+
+        const telegramUserId = req.url.split('/api/admin/quiz-answers/')[1];
+
+        try {
+            const userResult = await pool.query('SELECT id FROM users WHERE telegram_id = $1', [telegramUserId]);
+            if (userResult.rows.length === 0) {
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Пользователь не найден' }));
+                return;
+            }
+
+            const internalId = userResult.rows[0].id;
+
+            const result = await pool.query(`
+                SELECT qa.*, qq.question_text, qq.question_number, qq.department
+                FROM quiz_answers qa
+                JOIN quiz_questions qq ON qa.question_id = qq.id
+                WHERE qa.user_id = $1
+                ORDER BY qq.department, qq.question_number
+            `, [internalId]);
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true, answers: result.rows }));
+        } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Ошибка базы данных' }));
+        }
+        return;
+    }
+
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Not found' }));
+}
+
+function handleRequest(req, res) {
+    if (req.url.startsWith('/api/')) {
+        handleAuthAPI(req, res);
+        return;
+    }
+    serveStatic(req, res);
+}
+
+// Инициализация и запуск сервера
+async function startServer() {
+    await initDatabase();
+
+    const server = http.createServer(handleRequest);
+
+    server.listen(PORT, () => {
+        console.log('='.repeat(50));
+        console.log('Сервер авторизации запущен!');
+        console.log('='.repeat(50));
+        console.log('URL: http://localhost:' + PORT);
+        console.log('Остановить: Ctrl+C');
+        console.log('='.repeat(50));
+    });
+}
+
+startServer();
