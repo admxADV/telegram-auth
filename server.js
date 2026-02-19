@@ -16,14 +16,31 @@ const STATIC_DIR = path.join(__dirname, 'src');
 const ADMIN_USER_ID = parseInt(process.env.ADMIN_USER_ID) || 5093303797;
 
 // Инициализация PostgreSQL
+console.log('🔍 [DB] Проверка подключения к PostgreSQL...');
+console.log('🔍 [DB] DATABASE_URL:', process.env.DATABASE_URL ? 'задан (длина: ' + process.env.DATABASE_URL.length + ' симв.)' : 'НЕ задан');
+console.log('🔍 [DB] NODE_ENV:', process.env.NODE_ENV || 'not set');
+
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
+// Проверка подключения к БД
+pool.on('error', (err) => {
+    console.error('❌ [DB] Ошибка пула подключений:', err.message);
+});
+
 // Инициализация таблиц
 async function initDatabase() {
     try {
+        // Проверяем подключение к БД
+        console.log('🔍 [DB] Проверка подключения...');
+        const client = await pool.connect();
+        await client.query('SELECT NOW()');
+        console.log('✅ [DB] Подключение к PostgreSQL успешно');
+        client.release();
+        
+        console.log('📝 [DB] Создание таблиц...');
         await pool.query(`
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
@@ -82,9 +99,12 @@ async function initDatabase() {
             )
         `);
 
-        console.log('База данных инициализирована');
+        console.log('✅ [DB] База данных инициализирована');
     } catch (error) {
-        console.error('Ошибка инициализации БД:', error);
+        console.error('❌ [DB] Ошибка инициализации БД:', error.message);
+        console.error('❌ [DB] Код ошибки:', error.code);
+        console.error('❌ [DB] Убедитесь, что DATABASE_URL задан в панели Render');
+        throw error;
     }
 }
 
