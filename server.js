@@ -160,28 +160,8 @@ function setupBotHandlers() {
 }
 
 if (TELEGRAM_BOT_TOKEN) {
-    bot = new TelegramBot(TELEGRAM_BOT_TOKEN);
-
-    // Используем вебхуки в production, polling локально
-    if (process.env.NODE_ENV === 'production' && WEBAPP_URL.startsWith('https')) {
-        const webhookUrl = `${WEBAPP_URL}/telegram-webhook`;
-        bot.setWebHook(webhookUrl)
-            .then(() => {
-                console.log(`Webhook установлен на ${webhookUrl}`);
-                setupBotHandlers();
-            })
-            .catch(err => {
-                console.error('Ошибка установки webhook:', err);
-                // Фолбэк на polling если webhook не работает
-                bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: true });
-                setupBotHandlers();
-            });
-    } else {
-        // Локально используем polling
-        bot.options.polling = true;
-        bot.startPolling();
-        setupBotHandlers();
-    }
+    bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: true });
+    setupBotHandlers();
 }
 
 /**
@@ -658,36 +638,7 @@ async function handleAuthAPI(req, res) {
     res.end(JSON.stringify({ error: 'Not found' }));
 }
 
-// Обработчик Telegram webhook
-async function handleTelegramWebhook(req, res) {
-    if (req.method !== 'POST') {
-        res.writeHead(405);
-        res.end();
-        return;
-    }
-
-    let body = '';
-    req.on('data', chunk => { body += chunk.toString(); });
-    req.on('end', () => {
-        try {
-            const update = JSON.parse(body);
-            bot.processUpdate(update);
-            res.writeHead(200);
-            res.end();
-        } catch (error) {
-            console.error('Ошибка обработки webhook:', error);
-            res.writeHead(500);
-            res.end();
-        }
-    });
-}
-
 function handleRequest(req, res) {
-    // Обработка Telegram webhook
-    if (req.url === '/telegram-webhook') {
-        handleTelegramWebhook(req, res);
-        return;
-    }
     if (req.url.startsWith('/api/')) {
         handleAuthAPI(req, res);
         return;
