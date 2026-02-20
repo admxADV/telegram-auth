@@ -286,7 +286,12 @@ function serveStatic(req, res) {
         const content = fs.readFileSync(fullPath);
         const mimeType = getMimeType(fullPath);
 
-        res.writeHead(200, { 'Content-Type': mimeType, 'Cache-Control': 'no-cache' });
+        // Запрещаем кэширование для JS и HTML файлов
+        const noCache = filePath.endsWith('.js') || filePath.endsWith('.html');
+        res.writeHead(200, { 
+            'Content-Type': mimeType,
+            'Cache-Control': noCache ? 'no-store, no-cache, must-revalidate' : 'public, max-age=3600'
+        });
         res.end(content);
     } catch (error) {
         console.error('Ошибка при обработке статики:', error);
