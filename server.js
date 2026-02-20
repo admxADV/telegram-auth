@@ -4,7 +4,6 @@
  */
 
 const http = require('http');
-const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const { Pool } = require('pg');
@@ -114,7 +113,8 @@ const authSessions = new Map();
 
 // Инициализация Telegram бота
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const WEBAPP_URL = process.env.WEBAPP_URL || `http://localhost:${PORT}`;
+// Для production используем RENDER_EXTERNAL_URL или WEBAPP_URL из env
+const WEBAPP_URL = process.env.WEBAPP_URL || process.env.RENDER_EXTERNAL_URL || '';
 let bot = null;
 let botInitialized = false;
 
@@ -162,21 +162,37 @@ function setupBotHandlers() {
         };
 
         console.log(`🔔 Получена команда /start от пользователя ${userId} (@${userData.username}) с токеном ${authToken}`);
-        console.log(`🔧 WEBAPP_URL: ${WEBAPP_URL}`);
-        console.log(`🔧 NODE_ENV: ${process.env.NODE_ENV || 'not set'}`);
 
         try {
-            console.log(`📤 Отправка данных на сервер для авторизации...`);
-            const result = await sendAuthToServer(userId, authToken, userData);
-            console.log(`📥 Результат авторизации:`, result);
+            // Проверяем токен и сохраняем пользователя напрямую в БД
+            if (authToken && authToken.startsWith('auth_')) {
+                // Сохраняем пользователя в БД
+                await pool.query(`
+                    INSERT INTO users (telegram_id, username, first_name, last_name)
+                    VALUES ($1, $2, $3, $4)
+                    ON CONFLICT (telegram_id) DO UPDATE SET
+                        username = EXCLUDED.username,
+                        first_name = EXCLUDED.first_name,
+                        last_name = EXCLUDED.last_name
+                `, [userId, userData.username, userData.first_name, userData.last_name]);
 
-            if (result.success) {
+                // Сохраняем сессию в памяти
+                authSessions.set(authToken, {
+                    user_id: userId,
+                    username: userData.username,
+                    first_name: userData.first_name,
+                    last_name: userData.last_name,
+                    authorized: true,
+                    timestamp: Date.now()
+                });
+
+                console.log(`✅ Пользователь ${userId} (@${userData.username}) успешно авторизован`);
+
                 await bot.sendMessage(chatId,
                     '✅ *Авторизация успешна!*\n\n' +
                     'Возвращайтесь на сайт.',
                     { parse_mode: 'Markdown' }
                 );
-                console.log(`Пользователь ${userId} (@${userData.username}) успешно авторизован`);
             } else {
                 await bot.sendMessage(chatId,
                     '❌ *Ошибка авторизации*\n\n' +
@@ -185,7 +201,7 @@ function setupBotHandlers() {
                 );
             }
         } catch (error) {
-            console.error('Ошибка при отправке на сервер:', error);
+            console.error('Ошибка при авторизации:', error);
             await bot.sendMessage(chatId,
                 '❌ *Произошла ошибка*\n\n' +
                 'Попробуйте позже.',
@@ -217,89 +233,6 @@ function setupBotHandlers() {
 }
 
 // Инициализация бота будет выполнена после подключения к БД
-
-/**
- * Отправляет данные авторизации на сервер
- */
-async function sendAuthToServer(userId, authToken, userData) {
-    return new Promise((resolve, reject) => {
-        const data = JSON.stringify({
-            user_id: userId,
-            auth_token: authToken,
-            username: userData.username || null,
-            first_name: userData.first_name || null,
-            last_name: userData.last_name || null,
-            timestamp: Date.now()
-        });
-
-        // Используем WEBAPP_URL если задан (для production), иначе localhost
-        const isProduction = process.env.NODE_ENV === 'production' && WEBAPP_URL;
-        const isHttps = isProduction && WEBAPP_URL && WEBAPP_URL.startsWith('https');
-        
-        let options;
-
-        if (isProduction && WEBAPP_URL) {
-            // Для production - используем внешний URL
-            const url = new URL(WEBAPP_URL);
-            options = {
-                hostname: url.hostname,
-                port: url.port || (url.protocol === 'https:' ? 443 : 80),
-                path: '/api/auth/verify',
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Content-Length': Buffer.byteLength(data),
-                    'Host': url.hostname
-                }
-            };
-        } else {
-            // Для локальной разработки
-            options = {
-                hostname: 'localhost',
-                port: PORT,
-                path: '/api/auth/verify',
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Content-Length': Buffer.byteLength(data)
-                }
-            };
-        }
-
-        // В production используем https модуль
-        const requestModule = isHttps ? https : http;
-        const req = requestModule.request(options, (res) => {
-            let responseData = '';
-            res.on('data', (chunk) => { responseData += chunk; });
-            res.on('end', () => {
-                try { 
-                    const result = JSON.parse(responseData);
-                    console.log(`📥 [sendAuthToServer] Ответ сервера:`, result);
-                    resolve(result);
-                }
-                catch (e) { 
-                    console.error(`❌ [sendAuthToServer] Ошибка парсинга ответа:`, e.message);
-                    resolve({ success: false, error: 'Invalid response' }); 
-                }
-            });
-        });
-
-        req.on('error', (error) => {
-            console.error(`❌ [sendAuthToServer] Ошибка запроса:`, error.message);
-            reject(error);
-        });
-        
-        req.setTimeout(10000, () => {
-            req.destroy();
-            reject(new Error('Timeout'));
-        });
-        
-        req.write(data);
-        req.end();
-
-        console.log(`📤 [sendAuthToServer] Запрос отправлен на ${options.hostname}:${options.port}${options.path}`);
-    });
-}
 
 // MIME-типы
 const MIME_TYPES = {
