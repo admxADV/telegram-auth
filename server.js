@@ -20,9 +20,15 @@ console.log('🔍 [DB] Проверка подключения к PostgreSQL...'
 console.log('🔍 [DB] DATABASE_URL:', process.env.DATABASE_URL ? 'задан (длина: ' + process.env.DATABASE_URL.length + ' симв.)' : 'НЕ задан');
 console.log('🔍 [DB] NODE_ENV:', process.env.NODE_ENV || 'not set');
 
+// Проверка, является ли DATABASE_URL ссылкой на Neon DB
+const isNeonDb = process.env.DATABASE_URL && process.env.DATABASE_URL.includes('neon.tech');
+if (isNeonDb) {
+    console.log('🔵 [DB] Обнаружен Neon DB - включаем SSL с rejectUnauthorized=false');
+}
+
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
 });
 
 // Проверка подключения к БД
@@ -99,6 +105,18 @@ async function initDatabase() {
             )
         `);
 
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS auth_sessions (
+                token TEXT PRIMARY KEY,
+                user_id BIGINT NOT NULL,
+                username TEXT,
+                first_name TEXT,
+                last_name TEXT,
+                authorized BOOLEAN DEFAULT true,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
         console.log('✅ [DB] База данных инициализирована');
     } catch (error) {
         console.error('❌ [DB] Ошибка инициализации БД:', error.message);
@@ -107,9 +125,6 @@ async function initDatabase() {
         throw error;
     }
 }
-
-// Хранилище сессий в памяти
-const authSessions = new Map();
 
 // Инициализация Telegram бота
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -176,15 +191,18 @@ function setupBotHandlers() {
                         last_name = EXCLUDED.last_name
                 `, [userId, userData.username, userData.first_name, userData.last_name]);
 
-                // Сохраняем сессию в памяти
-                authSessions.set(authToken, {
-                    user_id: userId,
-                    username: userData.username,
-                    first_name: userData.first_name,
-                    last_name: userData.last_name,
-                    authorized: true,
-                    timestamp: Date.now()
-                });
+                // Сохраняем сессию в БД (вместо памяти)
+                await pool.query(`
+                    INSERT INTO auth_sessions (token, user_id, username, first_name, last_name, authorized)
+                    VALUES ($1, $2, $3, $4, $5, true)
+                    ON CONFLICT (token) DO UPDATE SET
+                        user_id = EXCLUDED.user_id,
+                        username = EXCLUDED.username,
+                        first_name = EXCLUDED.first_name,
+                        last_name = EXCLUDED.last_name,
+                        authorized = true,
+                        created_at = CURRENT_TIMESTAMP
+                `, [authToken, userId, userData.username, userData.first_name, userData.last_name]);
 
                 console.log(`✅ Пользователь ${userId} (@${userData.username}) успешно авторизован`);
 
@@ -291,24 +309,34 @@ async function handleAuthAPI(req, res) {
     // Проверка авторизации
     if (req.method === 'GET' && req.url.startsWith('/api/auth/check/')) {
         const token = req.url.split('/api/auth/check/')[1];
-        const session = authSessions.get(token);
 
-        console.log(`🔍 [API] Проверка токена: ${token ? token.substring(0, 30) + '...' : 'пустой'}`);
-        console.log(`🔍 [API] Сессия найдена: ${!!session}, авторизована: ${session?.authorized || false}`);
+        try {
+            // Читаем сессию из БД
+            const result = await pool.query(`
+                SELECT user_id, username, first_name, last_name, authorized
+                FROM auth_sessions
+                WHERE token = $1 AND authorized = true
+            `, [token]);
 
-        if (session && session.authorized) {
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
-                success: true,
-                authorized: true,
-                user_id: session.user_id,
-                username: session.username,
-                first_name: session.first_name,
-                last_name: session.last_name
-            }));
-        } else {
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: true, authorized: false }));
+            if (result.rows.length > 0) {
+                const session = result.rows[0];
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    success: true,
+                    authorized: true,
+                    user_id: session.user_id,
+                    username: session.username,
+                    first_name: session.first_name,
+                    last_name: session.last_name
+                }));
+            } else {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, authorized: false }));
+            }
+        } catch (error) {
+            console.error('Ошибка проверки авторизации:', error);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Ошибка сервера' }));
         }
         return;
     }
@@ -373,14 +401,28 @@ async function handleAuthAPI(req, res) {
         let isAdmin = false;
         const tokenToCheck = token ? token.replace('Bearer ', '') : null;
 
-        if (tokenToCheck && authSessions.has(tokenToCheck)) {
-            const session = authSessions.get(tokenToCheck);
-            if (session.user_id === ADMIN_USER_ID) isAdmin = true;
+        try {
+            // Проверяем сессию в БД
+            if (tokenToCheck) {
+                const sessionResult = await pool.query(`
+                    SELECT user_id FROM auth_sessions
+                    WHERE token = $1 AND authorized = true
+                `, [tokenToCheck]);
+
+                if (sessionResult.rows.length > 0) {
+                    const userId = sessionResult.rows[0].user_id;
+                    if (userId === ADMIN_USER_ID) {
+                        isAdmin = true;
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Ошибка проверки прав администратора:', error);
         }
 
         if (!isAdmin) {
             res.writeHead(403, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Доступ запрещен' }));
+            res.end(JSON.stringify({ error: 'Доступ запрещён' }));
             return;
         }
 
@@ -628,14 +670,30 @@ async function handleAuthAPI(req, res) {
     if (req.method === 'GET' && req.url.startsWith('/api/admin/quiz-answers/')) {
         const token = req.headers.authorization || req.url.split('token=')[1]?.split('&')[0];
         let isAdmin = false;
-        if (token && authSessions.has(token.replace('Bearer ', ''))) {
-            const session = authSessions.get(token.replace('Bearer ', ''));
-            if (session.user_id === ADMIN_USER_ID) isAdmin = true;
+        const tokenToCheck = token ? token.replace('Bearer ', '') : null;
+
+        try {
+            // Проверяем сессию в БД
+            if (tokenToCheck) {
+                const sessionResult = await pool.query(`
+                    SELECT user_id FROM auth_sessions
+                    WHERE token = $1 AND authorized = true
+                `, [tokenToCheck]);
+
+                if (sessionResult.rows.length > 0) {
+                    const userId = sessionResult.rows[0].user_id;
+                    if (userId === ADMIN_USER_ID) {
+                        isAdmin = true;
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Ошибка проверки прав администратора:', error);
         }
 
         if (!isAdmin) {
             res.writeHead(403, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Доступ запрещен' }));
+            res.end(JSON.stringify({ error: 'Доступ запрещён' }));
             return;
         }
 
