@@ -626,16 +626,47 @@ async function handleAuthAPI(req, res) {
 
     // Получение ответов пользователя (для админки)
     if (req.method === 'GET' && req.url.startsWith('/api/admin/quiz-answers/')) {
-        const token = req.headers.authorization || req.url.split('token=')[1]?.split('&')[0];
+        const authHeader = req.headers.authorization;
+        const urlToken = req.url.split('token=')[1]?.split('&')[0];
+        const token = authHeader || urlToken;
+        
+        console.log(`🔍 [ADMIN] Запрос ответов тестов`);
+        console.log(`🔍 [ADMIN] Authorization header: ${authHeader ? authHeader.substring(0, 30) + '...' : 'отсутствует'}`);
+        console.log(`🔍 [ADMIN] URL token: ${urlToken || 'отсутствует'}`);
+        console.log(`🔍 [ADMIN] Извлечён токен: ${token ? token.substring(0, 30) + '...' : 'отсутствует'}`);
+        
         let isAdmin = false;
-        if (token && authSessions.has(token.replace('Bearer ', ''))) {
-            const session = authSessions.get(token.replace('Bearer ', ''));
-            if (session.user_id === ADMIN_USER_ID) isAdmin = true;
+        let sessionInfo = 'нет сессии';
+        
+        if (token) {
+            const cleanToken = token.replace('Bearer ', '');
+            const session = authSessions.get(cleanToken);
+            if (session) {
+                sessionInfo = `user_id=${session.user_id}, authorized=${session.authorized}`;
+                if (session.user_id === ADMIN_USER_ID) {
+                    isAdmin = true;
+                    console.log(`✅ [ADMIN] Пользователь ${session.user_id} — администратор`);
+                } else {
+                    console.log(`⚠️ [ADMIN] Пользователь ${session.user_id} — НЕ администратор (ожидается ${ADMIN_USER_ID})`);
+                }
+            } else {
+                console.log(`⚠️ [ADMIN] Сессия не найдена для токена`);
+            }
         }
+        
+        console.log(`🔍 [ADMIN] Сессия: ${sessionInfo}`);
+        console.log(`🔍 [ADMIN] isAdmin: ${isAdmin}`);
 
         if (!isAdmin) {
             res.writeHead(403, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Доступ запрещен' }));
+            res.end(JSON.stringify({ 
+                error: 'Доступ запрещен',
+                debug: {
+                    hasToken: !!token,
+                    hasSession: token ? authSessions.has(token.replace('Bearer ', '')) : false,
+                    adminUserId: ADMIN_USER_ID
+                }
+            }));
             return;
         }
 
