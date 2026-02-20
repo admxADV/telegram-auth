@@ -252,8 +252,17 @@ function viewQuizAnswers(telegramId) {
     const content = document.getElementById('quiz-modal-content');
     const authToken = sessionStorage.getItem('auth_session');
 
+    console.log('[ADMIN] viewQuizAnswers вызвана');
+    console.log('[ADMIN] authToken:', authToken ? authToken.substring(0, 20) + '...' : 'НЕТ ТОКЕНА');
+    console.log('[ADMIN] telegramId:', telegramId);
+
     content.innerHTML = '<div class="loading">Загрузка ответов...</div>';
     modal.style.display = 'block';
+
+    if (!authToken) {
+        content.innerHTML = '<p>Ошибка: токен авторизации не найден. Попробуйте войти заново.</p>';
+        return;
+    }
 
     fetch('/api/admin/quiz-answers/' + telegramId, {
         headers: {
@@ -261,6 +270,7 @@ function viewQuizAnswers(telegramId) {
         }
     })
         .then(response => {
+            console.log('[ADMIN] Статус ответа:', response.status);
             if (!response.ok) {
                 if (response.status === 403) {
                     throw new Error('Доступ запрещён. Проверьте права администратора.');
@@ -270,6 +280,7 @@ function viewQuizAnswers(telegramId) {
             return response.json();
         })
         .then(data => {
+            console.log('[ADMIN] Данные получены:', data);
             if (data.answers && data.answers.length > 0) {
                 let html = '<h3>Ответы на тест</h3>';
                 let currentDept = '';
@@ -296,7 +307,7 @@ function viewQuizAnswers(telegramId) {
             }
         })
         .catch(error => {
-            console.error('Ошибка загрузки ответов:', error);
+            console.error('[ADMIN] Ошибка загрузки ответов:', error);
             content.innerHTML = '<p>' + error.message + '</p>';
         });
 }
