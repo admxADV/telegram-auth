@@ -430,6 +430,54 @@
         </div>
     </div>
 
+    <script>
+    // Функция просмотра ответов тестов - встроена для обхода кэша
+    function viewQuizAnswers(telegramId) {
+        const modal = document.getElementById('quiz-modal');
+        const content = document.getElementById('quiz-modal-content');
+        const authToken = sessionStorage.getItem('auth_session');
+
+        content.innerHTML = '<div class="loading">Загрузка ответов...</div>';
+        modal.style.display = 'block';
+
+        if (!authToken) {
+            content.innerHTML = '<p>Ошибка: токен авторизации не найден.</p>';
+            return;
+        }
+
+        fetch('/api/admin/quiz-answers/' + telegramId, {
+            headers: { 'Authorization': 'Bearer ' + authToken }
+        })
+        .then(r => {
+            if (!r.ok) throw new Error('Ошибка: ' + r.status);
+            return r.json();
+        })
+        .then(data => {
+            if (data.answers && data.answers.length > 0) {
+                let html = '<h3>Ответы на тест</h3>';
+                let currentDept = '';
+                data.answers.forEach(answer => {
+                    if (answer.department !== currentDept) {
+                        currentDept = answer.department;
+                        html += '<h4 style="margin:20px 0 10px;color:#667eea;">' + (departmentNames[currentDept] || currentDept) + '</h4>';
+                    }
+                    html += '<div style="margin-bottom:15px;padding:10px;background:#f8f9fa;border-radius:8px;">';
+                    html += '<div style="font-weight:600;margin-bottom:5px;">' + answer.question_number + '. ' + answer.question_text + '</div>';
+                    html += '<div style="color:#333;">' + (answer.answer_text || '—') + '</div>';
+                    if (answer.comment_text) html += '<div style="color:#666;font-size:12px;margin-top:5px;"><em>Комментарий: ' + answer.comment_text + '</em></div>';
+                    html += '</div>';
+                });
+                content.innerHTML = html;
+            } else {
+                content.innerHTML = '<p>Ответов пока нет</p>';
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            content.innerHTML = '<p>Ошибка: ' + err.message + '</p>';
+        });
+    }
+    </script>
     <script src="admin.v2.js?ts=1771628801"></script>
 </body>
 </html>
