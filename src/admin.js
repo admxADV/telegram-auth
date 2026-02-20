@@ -250,24 +250,37 @@ function renderUsers(users) {
 function viewQuizAnswers(telegramId) {
     const modal = document.getElementById('quiz-modal');
     const content = document.getElementById('quiz-modal-content');
-    
+    const authToken = sessionStorage.getItem('auth_session');
+
     content.innerHTML = '<div class="loading">Загрузка ответов...</div>';
     modal.style.display = 'block';
-    
-    fetch('/api/admin/quiz-answers/' + telegramId)
-        .then(response => response.json())
+
+    fetch('/api/admin/quiz-answers/' + telegramId, {
+        headers: {
+            'Authorization': 'Bearer ' + authToken
+        }
+    })
+        .then(response => {
+            if (!response.ok) {
+                if (response.status === 403) {
+                    throw new Error('Доступ запрещён. Проверьте права администратора.');
+                }
+                throw new Error('Ошибка загрузки: ' + response.status);
+            }
+            return response.json();
+        })
         .then(data => {
             if (data.answers && data.answers.length > 0) {
                 let html = '<h3>Ответы на тест</h3>';
                 let currentDept = '';
-                
+
                 data.answers.forEach(answer => {
                     // Заголовок раздела
                     if (answer.department !== currentDept) {
                         currentDept = answer.department;
                         html += `<h4 style="margin: 20px 0 10px; color: #667eea;">${departmentNames[currentDept] || currentDept}</h4>`;
                     }
-                    
+
                     html += `
                         <div style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 8px;">
                             <div style="font-weight: 600; margin-bottom: 5px;">${answer.question_number}. ${answer.question_text}</div>
@@ -276,7 +289,7 @@ function viewQuizAnswers(telegramId) {
                         </div>
                     `;
                 });
-                
+
                 content.innerHTML = html;
             } else {
                 content.innerHTML = '<p>Ответов пока нет</p>';
@@ -284,7 +297,7 @@ function viewQuizAnswers(telegramId) {
         })
         .catch(error => {
             console.error('Ошибка загрузки ответов:', error);
-            content.innerHTML = '<p>Ошибка загрузки ответов</p>';
+            content.innerHTML = '<p>' + error.message + '</p>';
         });
 }
 
