@@ -4,6 +4,7 @@
  */
 
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const { Pool } = require('pg');
@@ -115,6 +116,38 @@ const authSessions = new Map();
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const WEBAPP_URL = process.env.WEBAPP_URL || `http://localhost:${PORT}`;
 let bot = null;
+let botInitialized = false;
+
+// Функция для инициализации бота (вызывается после подключения к БД)
+function initTelegramBot() {
+    if (!TELEGRAM_BOT_TOKEN) {
+        console.warn('⚠️ TELEGRAM_BOT_TOKEN не задан, бот не будет работать');
+        return;
+    }
+    
+    if (botInitialized) {
+        console.log('ℹ️ Telegram бот уже инициализирован');
+        return;
+    }
+
+    console.log('🔧 Инициализация Telegram бота...');
+    console.log('🔧 TELEGRAM_BOT_TOKEN:', TELEGRAM_BOT_TOKEN ? 'задан (длина: ' + TELEGRAM_BOT_TOKEN.length + ')' : 'НЕ задан');
+    console.log('🔧 WEBAPP_URL:', WEBAPP_URL);
+
+    try {
+        bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: true });
+
+        bot.on('polling_error', (error) => {
+            console.error('❌ [Polling Error]:', error.code, error.message);
+        });
+
+        setupBotHandlers();
+        botInitialized = true;
+        console.log('✅ Бот успешно инициализирован');
+    } catch (error) {
+        console.error('❌ Ошибка инициализации бота:', error.message);
+    }
+}
 
 function setupBotHandlers() {
     bot.onText(/\/start (.+)/, async (msg, match) => {
@@ -183,22 +216,7 @@ function setupBotHandlers() {
     console.log('✅ Telegram бот запущен (@pavepobot)');
 }
 
-if (TELEGRAM_BOT_TOKEN) {
-    console.log('🔧 Инициализация Telegram бота...');
-    console.log('🔧 TELEGRAM_BOT_TOKEN:', TELEGRAM_BOT_TOKEN ? 'задан (длина: ' + TELEGRAM_BOT_TOKEN.length + ')' : 'НЕ задан');
-    
-    bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: true });
-    
-    bot.on('polling_error', (error) => {
-        console.error('❌ [Polling Error]:', error.code, error.message);
-    });
-    
-    setupBotHandlers();
-    
-    console.log('✅ Бот успешно инициализирован');
-} else {
-    console.warn('⚠️ TELEGRAM_BOT_TOKEN не задан, бот не будет работать');
-}
+// Инициализация бота будет выполнена после подключения к БД
 
 /**
  * Отправляет данные авторизации на сервер
@@ -216,9 +234,11 @@ async function sendAuthToServer(userId, authToken, userData) {
 
         // Используем WEBAPP_URL если задан (для production), иначе localhost
         const isProduction = process.env.NODE_ENV === 'production' && WEBAPP_URL;
+        const isHttps = isProduction && WEBAPP_URL && WEBAPP_URL.startsWith('https');
+        
         let options;
 
-        if (isProduction) {
+        if (isProduction && WEBAPP_URL) {
             // Для production - используем внешний URL
             const url = new URL(WEBAPP_URL);
             options = {
@@ -228,10 +248,10 @@ async function sendAuthToServer(userId, authToken, userData) {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Content-Length': Buffer.byteLength(data)
+                    'Content-Length': Buffer.byteLength(data),
+                    'Host': url.hostname
                 }
             };
-            // Для HTTPS нужно использовать https модуль
         } else {
             // Для локальной разработки
             options = {
@@ -247,13 +267,20 @@ async function sendAuthToServer(userId, authToken, userData) {
         }
 
         // В production используем https модуль
-        const requestModule = (isProduction && WEBAPP_URL.startsWith('https')) ? require('https') : http;
+        const requestModule = isHttps ? https : http;
         const req = requestModule.request(options, (res) => {
             let responseData = '';
             res.on('data', (chunk) => { responseData += chunk; });
             res.on('end', () => {
-                try { resolve(JSON.parse(responseData)); }
-                catch (e) { resolve({ success: false, error: 'Invalid response' }); }
+                try { 
+                    const result = JSON.parse(responseData);
+                    console.log(`📥 [sendAuthToServer] Ответ сервера:`, result);
+                    resolve(result);
+                }
+                catch (e) { 
+                    console.error(`❌ [sendAuthToServer] Ошибка парсинга ответа:`, e.message);
+                    resolve({ success: false, error: 'Invalid response' }); 
+                }
             });
         });
 
@@ -261,9 +288,15 @@ async function sendAuthToServer(userId, authToken, userData) {
             console.error(`❌ [sendAuthToServer] Ошибка запроса:`, error.message);
             reject(error);
         });
+        
+        req.setTimeout(10000, () => {
+            req.destroy();
+            reject(new Error('Timeout'));
+        });
+        
         req.write(data);
         req.end();
-        
+
         console.log(`📤 [sendAuthToServer] Запрос отправлен на ${options.hostname}:${options.port}${options.path}`);
     });
 }
@@ -326,6 +359,9 @@ async function handleAuthAPI(req, res) {
     if (req.method === 'GET' && req.url.startsWith('/api/auth/check/')) {
         const token = req.url.split('/api/auth/check/')[1];
         const session = authSessions.get(token);
+
+        console.log(`🔍 [API] Проверка токена: ${token ? token.substring(0, 30) + '...' : 'пустой'}`);
+        console.log(`🔍 [API] Сессия найдена: ${!!session}, авторизована: ${session?.authorized || false}`);
 
         if (session && session.authorized) {
             res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -720,6 +756,9 @@ async function startServer() {
     console.log('🔧 WEBAPP_URL:', process.env.WEBAPP_URL || 'not set');
 
     await initDatabase();
+    
+    // Инициализируем Telegram бота после подключения к БД
+    initTelegramBot();
 
     const server = http.createServer(handleRequest);
 

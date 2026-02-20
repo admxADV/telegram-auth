@@ -96,14 +96,19 @@ const departments = {
  */
 function checkAuth() {
     const authToken = sessionStorage.getItem('auth_session');
-    
+
     if (!authToken) {
         window.location.href = '/';
         return false;
     }
-    
+
     fetch('/api/auth/check/' + authToken)
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
         .then(data => {
             if (!data.authorized) {
                 sessionStorage.removeItem('auth_session');
@@ -117,8 +122,18 @@ function checkAuth() {
         })
         .catch(error => {
             console.error('Ошибка проверки авторизации:', error);
+            // При ошибке сети (сервер спит или недоступен) — не перенаправляем сразу,
+            // а пробуем позже. Но если сессия явно невалидна — на главную
+            if (error.message.includes('Failed to fetch') || error.message.includes('Network')) {
+                console.warn('Сервер временно недоступен. Повторная попытка через 2 сек...');
+                // Не перенаправляем, даём серверу время проснуться
+            } else {
+                // Другая ошибка — возможно сессия устарела
+                sessionStorage.removeItem('auth_session');
+                window.location.href = '/';
+            }
         });
-    
+
     return true;
 }
 

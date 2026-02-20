@@ -24,11 +24,15 @@ function createTelegramDeepLink(sessionToken) {
 async function checkAuthStatus(authToken) {
     try {
         const response = await fetch('/api/auth/check/' + authToken);
+        if (!response.ok) {
+            throw new Error('Network response was not ok: ' + response.status);
+        }
         const data = await response.json();
         return data.authorized === true;
     } catch (error) {
         console.error('Ошибка проверки:', error);
-        return false;
+        // При ошибке сети возвращаем null (не false), чтобы отличать от "не авторизован"
+        return null;
     }
 }
 
@@ -38,32 +42,45 @@ async function checkAuthStatus(authToken) {
 async function handleAuthClick(event) {
     const button = event.currentTarget;
     const originalText = button.innerHTML;
-    
+
     // Показываем загрузку
     button.disabled = true;
     button.innerHTML = 'Ожидание авторизации...';
-    
+
     // Генерируем токен
     const sessionToken = generateSessionToken();
     sessionStorage.setItem('auth_session', sessionToken);
-    
+
     // Открываем Telegram
     const telegramUrl = createTelegramDeepLink(sessionToken);
     window.open(telegramUrl, '_blank');
-    
+
     // Начинаем проверку
     let attempts = 0;
     const maxAttempts = 90; // 3 минуты
-    
+    let networkErrors = 0;
+
     const checkInterval = setInterval(async () => {
         attempts++;
-        
+
         const isAuthorized = await checkAuthStatus(sessionToken);
-        
-        if (isAuthorized) {
+
+        if (isAuthorized === true) {
             clearInterval(checkInterval);
             // Успех - перенаправляем
             window.location.href = '/dashboard.html';
+        } else if (isAuthorized === null) {
+            // Ошибка сети - возможно сервер спит
+            networkErrors++;
+            console.warn(`Ошибка сети (${networkErrors}/${maxAttempts}). Сервер может быть недоступен...`);
+            
+            if (networkErrors > 10) {
+                // Много ошибок сети - пробуем позже
+                clearInterval(checkInterval);
+                button.disabled = false;
+                button.innerHTML = originalText;
+                alert('Сервер временно недоступен. Попробуйте через минуту.');
+            }
         } else if (attempts >= maxAttempts) {
             clearInterval(checkInterval);
             button.disabled = false;
@@ -80,8 +97,14 @@ async function checkAlreadyAuthorized() {
     const authToken = sessionStorage.getItem('auth_session');
     if (authToken) {
         const isAuthorized = await checkAuthStatus(authToken);
-        if (isAuthorized) {
+        if (isAuthorized === true) {
             window.location.href = '/dashboard.html';
+        } else if (isAuthorized === null) {
+            // Ошибка сети - не перенаправляем, даём серверу время проснуться
+            console.warn('Сервер временно недоступен при проверке сессии');
+        } else {
+            // Сессия невалидна - очищаем
+            sessionStorage.removeItem('auth_session');
         }
     }
 }
