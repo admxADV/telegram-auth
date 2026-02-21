@@ -736,6 +736,25 @@ async function handleAuthAPI(req, res) {
 }
 
 function handleRequest(req, res) {
+    // Админка через сервер для обхода кэша
+    if (req.url === '/admin.html' || req.url === '/admin-new.html') {
+        const fs = require('fs');
+        const path = require('path');
+        const filePath = path.join(STATIC_DIR, 'admin.html');
+        
+        if (fs.existsSync(filePath)) {
+            const content = fs.readFileSync(filePath);
+            res.writeHead(200, { 
+                'Content-Type': 'text/html',
+                'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            });
+            res.end(content);
+            return;
+        }
+    }
+    
     if (req.url.startsWith('/api/')) {
         handleAuthAPI(req, res);
         return;
