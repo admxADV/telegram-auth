@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Проверка авторизации</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: #1a1a1a;
+            color: #00ff00;
+            padding: 20px;
+        }
+        .log { margin: 10px 0; }
+        .error { color: #ff4444; }
+        .success { color: #00ff00; }
+        .warn { color: #ffbb00; }
+        button {
+            padding: 10px 20px;
+            margin: 10px 5px 10px 0;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        button:hover { background: #5568d3; }
+        pre {
+            background: #2a2a2a;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Проверка авторизации</h1>
+    
+    <div>
+        <button onclick="checkSession()">Проверить сессию</button>
+        <button onclick="clearSession()">Очистить сессию</button>
+        <button onclick="goToAdmin()">Перейти в админку</button>
+        <button onclick="goToDashboard()">В личный кабинет</button>
+    </div>
+
+    <div id="output"></div>
+
+    <script>
+    const ADMIN_USER_ID = 7273603260;
+    
+    function log(message, type = 'log') {
+        const div = document.createElement('div');
+        div.className = `log ${type}`;
+        div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+        document.getElementById('output').appendChild(div);
+    }
+
+    function checkSession() {
+        document.getElementById('output').innerHTML = '';
+        
+        const authToken = sessionStorage.getItem('auth_session');
+        const userId = sessionStorage.getItem('user_id');
+        
+        log('sessionStorage.auth_session: ' + (authToken ? authToken.substring(0, 30) + '...' : 'null'), authToken ? 'success' : 'error');
+        log('sessionStorage.user_id: ' + userId, userId ? 'success' : 'error');
+        
+        if (!authToken) {
+            log('❌ Токен не найден! Нужно авторизоваться на главной странице.', 'error');
+            return;
+        }
+
+        log('🔍 Проверка токена на сервере...', 'warn');
+        
+        fetch('/api/auth/check/' + authToken)
+            .then(r => {
+                log('Status: ' + r.status, r.ok ? 'success' : 'error');
+                return r.json();
+            })
+            .then(data => {
+                log('Ответ сервера: ' + JSON.stringify(data, null, 2), 'success');
+                
+                if (data.authorized) {
+                    log('✅ Авторизация успешна!', 'success');
+                    
+                    const uid = parseInt(data.user_id) || parseInt(data.telegram_id);
+                    log('Ваш user_id: ' + uid, 'success');
+                    log('ADMIN_USER_ID: ' + ADMIN_USER_ID, 'warn');
+                    
+                    if (uid === ADMIN_USER_ID) {
+                        log('🎉 Вы АДМИНИСТРАТОР!', 'success');
+                        log('➡️ Можете перейти в админку', 'success');
+                    } else {
+                        log('⚠️ Вы не администратор', 'warn');
+                    }
+                } else {
+                    log('❌ Токен невалиден', 'error');
+                }
+            })
+            .catch(err => {
+                log('Ошибка: ' + err.message, 'error');
+            });
+    }
+
+    function clearSession() {
+        sessionStorage.removeItem('auth_session');
+        sessionStorage.removeItem('user_id');
+        log('🗑️ Сессия очищена', 'warn');
+    }
+
+    function goToAdmin() {
+        window.location.href = '/admin-new.html';
+    }
+
+    function goToDashboard() {
+        window.location.href = '/dashboard.html';
+    }
+
+    // Автопроверка при загрузке
+    window.onload = () => {
+        log('📄 Страница загружена', 'log');
+        checkSession();
+    };
+    </script>
+</body>
+</html>
