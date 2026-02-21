@@ -150,10 +150,22 @@ function initTelegramBot() {
     console.log('🔧 WEBAPP_URL:', WEBAPP_URL);
 
     try {
-        bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: true });
+        bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { 
+            polling: { 
+                interval: 300,
+                autoStart: true,
+                timeout: 10
+            }
+        });
 
         bot.on('polling_error', (error) => {
             console.error('❌ [Polling Error]:', error.code, error.message);
+            
+            // Обработка ошибки 409 Conflict - другой экземпляр бота запущен
+            if (error.code === 409 || (error.message && error.message.includes('409'))) {
+                console.warn('⚠️ Бот уже запущен в другом экземпляре. Останавливаем polling...');
+                // Не останавливаем polling - Render сам управляет экземплярами
+            }
         });
 
         setupBotHandlers();
