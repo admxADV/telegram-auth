@@ -339,11 +339,13 @@ async function handleAuthAPI(req, res) {
 
             if (result.rows.length > 0) {
                 const session = result.rows[0];
+                // Если telegram_id получен через JOIN - используем его, иначе возвращаем user_id
+                const userIdForClient = session.telegram_id || session.user_id;
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({
                     success: true,
                     authorized: true,
-                    user_id: session.telegram_id, // Возвращаем telegram_id для проверки админ-прав
+                    user_id: userIdForClient,
                     username: session.username,
                     first_name: session.first_name,
                     last_name: session.last_name
@@ -432,7 +434,8 @@ async function handleAuthAPI(req, res) {
 
                 if (sessionResult.rows.length > 0) {
                     const telegramId = sessionResult.rows[0].telegram_id;
-                    if (telegramId === ADMIN_USER_ID) {
+                    // Проверяем telegram_id если он доступен
+                    if (telegramId && telegramId === ADMIN_USER_ID) {
                         isAdmin = true;
                     }
                 }
@@ -705,7 +708,8 @@ async function handleAuthAPI(req, res) {
 
                 if (sessionResult.rows.length > 0) {
                     const telegramId = sessionResult.rows[0].telegram_id;
-                    if (telegramId === ADMIN_USER_ID) {
+                    // Проверяем telegram_id если он доступен
+                    if (telegramId && telegramId === ADMIN_USER_ID) {
                         isAdmin = true;
                     }
                 }
