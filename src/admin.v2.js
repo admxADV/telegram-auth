@@ -5,7 +5,7 @@
 const AUTH_CHECK_INTERVAL = 2000;
 
 // ID администратора (только этот пользователь может访问 админ панель)
-const ADMIN_USER_ID = 5093303797;
+const ADMIN_USER_ID = 7273603260;
 
 // Хранилище данных
 let allUsers = [];

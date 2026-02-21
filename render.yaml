@@ -16,6 +16,6 @@ services:
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: ADMIN_USER_ID
-        value: 5093303797
+        value: 7273603260
       - key: PORT
         value: 3000

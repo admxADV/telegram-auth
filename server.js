@@ -13,7 +13,7 @@ const PORT = process.env.PORT || 3000;
 const STATIC_DIR = path.join(__dirname, 'src');
 
 // ID администратора
-const ADMIN_USER_ID = parseInt(process.env.ADMIN_USER_ID) || 5093303797;
+const ADMIN_USER_ID = parseInt(process.env.ADMIN_USER_ID) || 7273603260;
 
 // Инициализация PostgreSQL
 console.log('🔍 [DB] Проверка подключения к PostgreSQL...');
