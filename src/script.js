@@ -3,7 +3,7 @@
  */
 
 const TELEGRAM_BOT_USERNAME = 'pavepobot';
-const ADMIN_USER_ID = 7273603260; // ID администратора
+const ADMIN_USER_ID = 5093303797; // ID администратора
 
 /**
  * Генерирует токен авторизации

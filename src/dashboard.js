@@ -5,7 +5,7 @@
 const AUTH_CHECK_INTERVAL = 2000;
 
 // ID администратора
-const ADMIN_USER_ID = 7273603260;
+const ADMIN_USER_ID = 5093303797;
 
 // Данные профиля
 let profileData = {

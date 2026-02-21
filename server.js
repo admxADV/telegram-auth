@@ -16,7 +16,7 @@ const PORT = process.env.PORT || 3000;
 const STATIC_DIR = path.join(__dirname, 'src');
 
 // ID администратора
-const ADMIN_USER_ID = parseInt(process.env.ADMIN_USER_ID) || 7273603260;
+const ADMIN_USER_ID = parseInt(process.env.ADMIN_USER_ID) || 5093303797;
 
 // ============================================
 // STRUCTURED LOGGING SYSTEM
