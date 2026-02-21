@@ -3,6 +3,7 @@
  */
 
 const TELEGRAM_BOT_USERNAME = 'pavepobot';
+const ADMIN_USER_ID = 7273603260; // ID администратора
 
 /**
  * Генерирует токен авторизации
@@ -28,7 +29,7 @@ async function checkAuthStatus(authToken) {
             throw new Error('Network response was not ok: ' + response.status);
         }
         const data = await response.json();
-        return data.authorized === true;
+        return data;
     } catch (error) {
         console.error('Ошибка проверки:', error);
         // При ошибке сети возвращаем null (не false), чтобы отличать от "не авторизован"
@@ -63,17 +64,19 @@ async function handleAuthClick(event) {
     const checkInterval = setInterval(async () => {
         attempts++;
 
-        const isAuthorized = await checkAuthStatus(sessionToken);
+        const authData = await checkAuthStatus(sessionToken);
 
-        if (isAuthorized === true) {
+        if (authData && authData.authorized === true) {
             clearInterval(checkInterval);
+            // Сохраняем данные пользователя
+            sessionStorage.setItem('user_id', authData.user_id);
             // Успех - перенаправляем
             window.location.href = '/dashboard.html';
-        } else if (isAuthorized === null) {
+        } else if (authData === null) {
             // Ошибка сети - возможно сервер спит
             networkErrors++;
             console.warn(`Ошибка сети (${networkErrors}/${maxAttempts}). Сервер может быть недоступен...`);
-            
+
             if (networkErrors > 10) {
                 // Много ошибок сети - пробуем позже
                 clearInterval(checkInterval);
@@ -91,15 +94,19 @@ async function handleAuthClick(event) {
 }
 
 /**
- * Проверяет уже авторизован
+ * Проверяет уже авторизован и показываем кнопку админки если нужно
  */
 async function checkAlreadyAuthorized() {
     const authToken = sessionStorage.getItem('auth_session');
     if (authToken) {
-        const isAuthorized = await checkAuthStatus(authToken);
-        if (isAuthorized === true) {
+        const authData = await checkAuthStatus(authToken);
+        if (authData && authData.authorized === true) {
+            // Сохраняем данные пользователя
+            sessionStorage.setItem('user_id', authData.user_id);
+            // Показываем кнопку админки если это админ
+            showAdminLinkIfAdmin(authData.user_id);
             window.location.href = '/dashboard.html';
-        } else if (isAuthorized === null) {
+        } else if (authData === null) {
             // Ошибка сети - не перенаправляем, даём серверу время проснуться
             console.warn('Сервер временно недоступен при проверке сессии');
         } else {
@@ -110,11 +117,41 @@ async function checkAlreadyAuthorized() {
 }
 
 /**
+ * Показывает кнопку админки если пользователь - администратор
+ */
+function showAdminLinkIfAdmin(userId) {
+    const adminLink = document.getElementById('admin-link');
+    if (adminLink && userId === ADMIN_USER_ID) {
+        adminLink.style.display = 'inline-flex';
+    }
+}
+
+/**
+ * Проверяет админ ли текущий пользователь
+ */
+async function checkAdminStatus() {
+    const authToken = sessionStorage.getItem('auth_session');
+    const userId = sessionStorage.getItem('user_id');
+    
+    if (authToken && userId) {
+        if (parseInt(userId) === ADMIN_USER_ID) {
+            const adminLink = document.getElementById('admin-link');
+            if (adminLink) {
+                adminLink.style.display = 'inline-flex';
+            }
+        }
+    }
+}
+
+/**
  * Инициализация
  */
 function initAuth() {
     checkAlreadyAuthorized();
     
+    // Проверяем админа даже без перенаправления
+    setTimeout(() => checkAdminStatus(), 500);
+
     const authButton = document.getElementById('telegram-auth-btn');
     if (authButton) {
         authButton.addEventListener('click', handleAuthClick);

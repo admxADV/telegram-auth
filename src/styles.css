@@ -122,6 +122,37 @@ body {
     line-height: 1.5;
 }
 
+/* Ссылка на админ панель */
+.admin-link-wrapper {
+    margin-top: 16px;
+}
+
+.admin-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: #f5f5f5;
+    color: #667eea;
+    text-decoration: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+}
+
+.admin-link:hover {
+    background: #e8e8e8;
+    border-color: #667eea;
+    transform: translateY(-1px);
+}
+
+.admin-icon {
+    width: 18px;
+    height: 18px;
+}
+
 /* Анимация загрузки */
 @keyframes pulse {
     0%, 100% {
