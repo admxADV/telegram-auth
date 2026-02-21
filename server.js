@@ -446,12 +446,18 @@ async function handleAuthAPI(req, res, request_id = null, startTime = null) {
             if (result.rows.length > 0) {
                 const session = result.rows[0];
                 const userIdForClient = session.telegram_id || session.user_id;
-                logger.info('API', 'Auth check success', { request_id, user_id: userIdForClient });
+                logger.info('API', 'Auth check success', {
+                    request_id,
+                    user_id: userIdForClient,
+                    telegram_id: session.telegram_id,
+                    user_id_type: typeof userIdForClient
+                });
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({
                     success: true,
                     authorized: true,
                     user_id: userIdForClient,
+                    telegram_id: session.telegram_id,
                     username: session.username,
                     first_name: session.first_name,
                     last_name: session.last_name

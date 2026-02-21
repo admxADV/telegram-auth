@@ -497,23 +497,45 @@
 
     function checkAuth() {
         const authToken = sessionStorage.getItem('auth_session');
+        console.log('[Admin] Проверка авторизации, токен:', authToken ? 'есть' : 'нет');
+        
         if (!authToken) {
+            console.log('[Admin] Токен не найден, редирект на /');
             window.location.href = '/';
             return false;
         }
+        
         fetch('/api/auth/check/' + authToken)
-            .then(r => r.json())
+            .then(r => {
+                console.log('[Admin] Статус ответа:', r.status);
+                return r.json();
+            })
             .then(data => {
+                console.log('[Admin] Данные авторизации:', data);
+                
                 if (!data.authorized) {
+                    console.log('[Admin] Не авторизован, редирект на /');
                     sessionStorage.removeItem('auth_session');
                     window.location.href = '/';
-                } else if (parseInt(data.user_id) !== ADMIN_USER_ID) {
-                    window.location.href = '/dashboard.html';
-                } else {
-                    loadUsers();
+                    return;
                 }
+                
+                const userId = parseInt(data.user_id) || parseInt(data.telegram_id);
+                console.log('[Admin] User ID:', userId, 'ADMIN_USER_ID:', ADMIN_USER_ID);
+                
+                if (userId !== ADMIN_USER_ID) {
+                    console.log('[Admin] Не админ, редирект на /dashboard.html');
+                    window.location.href = '/dashboard.html';
+                    return;
+                }
+                
+                console.log('[Admin] Успешная авторизация, загрузка пользователей');
+                loadUsers();
             })
-            .catch(err => console.error('Ошибка авторизации:', err));
+            .catch(err => {
+                console.error('[Admin] Ошибка авторизации:', err);
+                alert('Ошибка проверки авторизации: ' + err.message);
+            });
         return true;
     }
 

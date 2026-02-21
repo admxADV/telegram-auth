@@ -143,7 +143,10 @@ function checkAuth() {
 function showAdminLink(userId) {
     const adminLink = document.getElementById('admin-nav-link');
     if (adminLink) {
-        adminLink.style.display = (userId === ADMIN_USER_ID) ? 'inline-block' : 'none';
+        // Сравниваем как числа, т.к. userId может быть строкой
+        const userIdNum = parseInt(userId);
+        console.log('[Dashboard] showAdminLink: userId =', userId, 'ADMIN_USER_ID =', ADMIN_USER_ID, 'match =', userIdNum === ADMIN_USER_ID);
+        adminLink.style.display = (userIdNum === ADMIN_USER_ID) ? 'inline-block' : 'none';
     }
 }
 
