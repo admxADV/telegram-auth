@@ -1,6 +1,8 @@
 /**
  * Сервер для авторизации через Telegram бота + профили пользователей
  * Версия для Render.com с PostgreSQL
+ * 
+ * AI DEBUG PROMPT: См. .qwen/AI_DEBUG_PROMPT.txt
  */
 
 const http = require('http');
@@ -8,6 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const { Pool } = require('pg');
 const TelegramBot = require('node-telegram-bot-api');
+const crypto = require('crypto');
 
 const PORT = process.env.PORT || 3000;
 const STATIC_DIR = path.join(__dirname, 'src');
@@ -15,15 +18,62 @@ const STATIC_DIR = path.join(__dirname, 'src');
 // ID администратора
 const ADMIN_USER_ID = parseInt(process.env.ADMIN_USER_ID) || 7273603260;
 
+// ============================================
+// STRUCTURED LOGGING SYSTEM
+// ============================================
+
+function generateRequestId() {
+    return crypto.randomUUID();
+}
+
+function log(level, module, message, context = {}) {
+    const logEntry = {
+        timestamp: new Date().toISOString(),
+        level,
+        module,
+        request_id: context.request_id || 'N/A',
+        user_id: context.user_id || 'N/A',
+        message,
+        ...context
+    };
+    console.log(JSON.stringify(logEntry));
+    return logEntry;
+}
+
+const logger = {
+    info: (module, message, context = {}) => log('INFO', module, message, context),
+    warn: (module, message, context = {}) => log('WARN', module, message, context),
+    error: (module, message, context = {}) => log('ERROR', module, message, context),
+    debug: (module, message, context = {}) => log('DEBUG', module, message, context)
+};
+
+// Global error handler
+process.on('uncaughtException', (err) => {
+    logger.error('PROCESS', 'Uncaught Exception', {
+        error: err.message,
+        stack: err.stack,
+        request_id: 'N/A'
+    });
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    logger.error('PROCESS', 'Unhandled Rejection', {
+        reason: reason?.message || String(reason),
+        stack: reason?.stack || 'N/A',
+        request_id: 'N/A'
+    });
+});
+
 // Инициализация PostgreSQL
-console.log('🔍 [DB] Проверка подключения к PostgreSQL...');
-console.log('🔍 [DB] DATABASE_URL:', process.env.DATABASE_URL ? 'задан (длина: ' + process.env.DATABASE_URL.length + ' симв.)' : 'НЕ задан');
-console.log('🔍 [DB] NODE_ENV:', process.env.NODE_ENV || 'not set');
+logger.info('SERVER', 'Запуск инициализации PostgreSQL', {
+    DATABASE_URL: process.env.DATABASE_URL ? 'задан (длина: ' + process.env.DATABASE_URL.length + ' симв.)' : 'НЕ задан',
+    NODE_ENV: process.env.NODE_ENV || 'not set'
+});
 
 // Проверка, является ли DATABASE_URL ссылкой на Neon DB
 const isNeonDb = process.env.DATABASE_URL && process.env.DATABASE_URL.includes('neon.tech');
 if (isNeonDb) {
-    console.log('🔵 [DB] Обнаружен Neon DB - включаем SSL с rejectUnauthorized=false');
+    logger.info('DB', 'Обнаружен Neon DB - включаем SSL с rejectUnauthorized=false');
 }
 
 const pool = new Pool({
@@ -33,20 +83,24 @@ const pool = new Pool({
 
 // Проверка подключения к БД
 pool.on('error', (err) => {
-    console.error('❌ [DB] Ошибка пула подключений:', err.message);
+    logger.error('DB', 'Ошибка пула подключений', {
+        error: err.message,
+        stack: err.stack
+    });
 });
 
 // Инициализация таблиц
 async function initDatabase() {
+    const request_id = generateRequestId();
     try {
         // Проверяем подключение к БД
-        console.log('🔍 [DB] Проверка подключения...');
+        logger.info('DB', 'Проверка подключения...', { request_id });
         const client = await pool.connect();
         await client.query('SELECT NOW()');
-        console.log('✅ [DB] Подключение к PostgreSQL успешно');
+        logger.info('DB', 'Подключение к PostgreSQL успешно', { request_id });
         client.release();
-        
-        console.log('📝 [DB] Создание таблиц...');
+
+        logger.info('DB', 'Создание таблиц...', { request_id });
         await pool.query(`
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
@@ -117,11 +171,15 @@ async function initDatabase() {
             )
         `);
 
-        console.log('✅ [DB] База данных инициализирована');
+        logger.info('DB', 'База данных инициализирована', { request_id });
     } catch (error) {
-        console.error('❌ [DB] Ошибка инициализации БД:', error.message);
-        console.error('❌ [DB] Код ошибки:', error.code);
-        console.error('❌ [DB] Убедитесь, что DATABASE_URL задан в панели Render');
+        logger.error('DB', 'Ошибка инициализации БД', {
+            request_id,
+            error: error.message,
+            code: error.code,
+            stack: error.stack
+        });
+        logger.error('DB', 'Убедитесь, что DATABASE_URL задан в панели Render', { request_id });
         throw error;
     }
 }
@@ -135,23 +193,27 @@ let botInitialized = false;
 
 // Функция для инициализации бота (вызывается после подключения к БД)
 function initTelegramBot() {
-    if (!TELEGRAM_BOT_TOKEN) {
-        console.warn('⚠️ TELEGRAM_BOT_TOKEN не задан, бот не будет работать');
-        return;
-    }
+    const request_id = generateRequestId();
     
-    if (botInitialized) {
-        console.log('ℹ️ Telegram бот уже инициализирован');
+    if (!TELEGRAM_BOT_TOKEN) {
+        logger.warn('BOT', 'TELEGRAM_BOT_TOKEN не задан, бот не будет работать', { request_id });
         return;
     }
 
-    console.log('🔧 Инициализация Telegram бота...');
-    console.log('🔧 TELEGRAM_BOT_TOKEN:', TELEGRAM_BOT_TOKEN ? 'задан (длина: ' + TELEGRAM_BOT_TOKEN.length + ')' : 'НЕ задан');
-    console.log('🔧 WEBAPP_URL:', WEBAPP_URL);
+    if (botInitialized) {
+        logger.info('BOT', 'Telegram бот уже инициализирован', { request_id });
+        return;
+    }
+
+    logger.info('BOT', 'Инициализация Telegram бота...', {
+        request_id,
+        TELEGRAM_BOT_TOKEN: TELEGRAM_BOT_TOKEN ? 'задан (длина: ' + TELEGRAM_BOT_TOKEN.length + ')' : 'НЕ задан',
+        WEBAPP_URL
+    });
 
     try {
-        bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { 
-            polling: { 
+        bot = new TelegramBot(TELEGRAM_BOT_TOKEN, {
+            polling: {
                 interval: 300,
                 autoStart: true,
                 timeout: 10
@@ -159,25 +221,33 @@ function initTelegramBot() {
         });
 
         bot.on('polling_error', (error) => {
-            console.error('❌ [Polling Error]:', error.code, error.message);
-            
+            logger.error('BOT', 'Polling Error', {
+                request_id,
+                code: error.code,
+                message: error.message
+            });
+
             // Обработка ошибки 409 Conflict - другой экземпляр бота запущен
             if (error.code === 409 || (error.message && error.message.includes('409'))) {
-                console.warn('⚠️ Бот уже запущен в другом экземпляре. Останавливаем polling...');
-                // Не останавливаем polling - Render сам управляет экземплярами
+                logger.warn('BOT', 'Бот уже запущен в другом экземпляре', { request_id });
             }
         });
 
         setupBotHandlers();
         botInitialized = true;
-        console.log('✅ Бот успешно инициализирован');
+        logger.info('BOT', 'Бот успешно инициализирован', { request_id });
     } catch (error) {
-        console.error('❌ Ошибка инициализации бота:', error.message);
+        logger.error('BOT', 'Ошибка инициализации бота', {
+            request_id,
+            error: error.message,
+            stack: error.stack
+        });
     }
 }
 
 function setupBotHandlers() {
     bot.onText(/\/start (.+)/, async (msg, match) => {
+        const request_id = generateRequestId();
         const chatId = msg.chat.id;
         const userId = msg.from.id;
         const authToken = match[1];
@@ -188,12 +258,15 @@ function setupBotHandlers() {
             last_name: msg.from.last_name
         };
 
-        console.log(`🔔 Получена команда /start от пользователя ${userId} (@${userData.username}) с токеном ${authToken}`);
+        logger.info('BOT', 'Получена команда /start с токеном', {
+            request_id,
+            user_id: userId,
+            username: msg.from.username,
+            token: authToken ? authToken.substring(0, 20) + '...' : 'N/A'
+        });
 
         try {
-            // Проверяем токен и сохраняем пользователя напрямую в БД
             if (authToken && authToken.startsWith('auth_')) {
-                // Сохраняем пользователя в БД
                 await pool.query(`
                     INSERT INTO users (telegram_id, username, first_name, last_name)
                     VALUES ($1, $2, $3, $4)
@@ -203,7 +276,6 @@ function setupBotHandlers() {
                         last_name = EXCLUDED.last_name
                 `, [userId, userData.username, userData.first_name, userData.last_name]);
 
-                // Сохраняем сессию в БД (вместо памяти)
                 await pool.query(`
                     INSERT INTO auth_sessions (token, user_id, username, first_name, last_name, authorized)
                     VALUES ($1, $2, $3, $4, $5, true)
@@ -216,7 +288,11 @@ function setupBotHandlers() {
                         created_at = CURRENT_TIMESTAMP
                 `, [authToken, userId, userData.username, userData.first_name, userData.last_name]);
 
-                console.log(`✅ Пользователь ${userId} (@${userData.username}) успешно авторизован`);
+                logger.info('BOT', 'Пользователь успешно авторизован', {
+                    request_id,
+                    user_id: userId,
+                    username: msg.from.username
+                });
 
                 await bot.sendMessage(chatId,
                     '✅ *Авторизация успешна!*\n\n' +
@@ -231,7 +307,12 @@ function setupBotHandlers() {
                 );
             }
         } catch (error) {
-            console.error('Ошибка при авторизации:', error);
+            logger.error('BOT', 'Ошибка при авторизации', {
+                request_id,
+                user_id: userId,
+                error: error.message,
+                stack: error.stack
+            });
             await bot.sendMessage(chatId,
                 '❌ *Произошла ошибка*\n\n' +
                 'Попробуйте позже.',
@@ -241,7 +322,12 @@ function setupBotHandlers() {
     });
 
     bot.onText(/\/start$/, (msg) => {
+        const request_id = generateRequestId();
         const chatId = msg.chat.id;
+        logger.info('BOT', 'Получена команда /start без токена', {
+            request_id,
+            user_id: msg.from.id
+        });
         bot.sendMessage(chatId,
             '👋 *Добро пожаловать в PAVEPO!*\n\n' +
             'Для авторизации нажмите кнопку "Войти через Telegram" на сайте.',
@@ -250,8 +336,13 @@ function setupBotHandlers() {
     });
 
     bot.on('message', (msg) => {
+        const request_id = generateRequestId();
         if (msg.text && msg.text.startsWith('/')) return;
         const chatId = msg.chat.id;
+        logger.info('BOT', 'Получено сообщение', {
+            request_id,
+            user_id: msg.from.id
+        });
         bot.sendMessage(chatId,
             '📩 *PAVEPO Bot*\n\n' +
             'Для авторизации перейдите на сайт и нажмите "Войти через Telegram".',
@@ -259,7 +350,7 @@ function setupBotHandlers() {
         );
     });
 
-    console.log('✅ Telegram бот запущен (@pavepobot)');
+    logger.info('BOT', 'Telegram бот запущен (@pavepobot)');
 }
 
 // Инициализация бота будет выполнена после подключения к БД
@@ -284,12 +375,14 @@ function getMimeType(filePath) {
 }
 
 function serveStatic(req, res) {
+    const request_id = generateRequestId();
     try {
         let filePath = req.url.split('?')[0];
         if (filePath === '/') filePath = '/index.html';
         const fullPath = path.join(STATIC_DIR, filePath);
 
         if (!fs.existsSync(fullPath)) {
+            logger.warn('HTTP', 'Файл не найден', { request_id, file: filePath });
             res.writeHead(404, { 'Content-Type': 'text/html' });
             res.end('<h1>404 - Файл не найден</h1>');
             return;
@@ -300,22 +393,37 @@ function serveStatic(req, res) {
 
         // Запрещаем кэширование для JS и HTML файлов
         const noCache = filePath.endsWith('.js') || filePath.endsWith('.html');
-        res.writeHead(200, { 
+        res.writeHead(200, {
             'Content-Type': mimeType,
             'Cache-Control': noCache ? 'no-store, no-cache, must-revalidate' : 'public, max-age=3600'
         });
+        logger.debug('HTTP', 'Static file served', { request_id, file: filePath, mimeType });
         res.end(content);
     } catch (error) {
-        console.error('Ошибка при обработке статики:', error);
+        logger.error('HTTP', 'Ошибка при обработке статики', {
+            request_id,
+            error: error.message,
+            stack: error.stack
+        });
         res.writeHead(500, { 'Content-Type': 'text/html' });
         res.end('<h1>500 - Ошибка сервера</h1>');
     }
 }
 
-async function handleAuthAPI(req, res) {
+async function handleAuthAPI(req, res, request_id = null, startTime = null) {
+    request_id = request_id || generateRequestId();
+    startTime = startTime || Date.now();
+    
+    logger.info('API', `Request: ${req.method} ${req.url}`, {
+        request_id,
+        method: req.method,
+        url: req.url
+    });
+    
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('X-Request-ID', request_id);
 
     if (req.method === 'OPTIONS') {
         res.writeHead(200);
@@ -328,8 +436,6 @@ async function handleAuthAPI(req, res) {
         const token = req.url.split('/api/auth/check/')[1];
 
         try {
-            // Читаем сессию из БД
-            // JOIN с users для получения telegram_id
             const result = await pool.query(`
                 SELECT s.user_id, s.username, s.first_name, s.last_name, s.authorized, u.telegram_id
                 FROM auth_sessions s
@@ -339,8 +445,8 @@ async function handleAuthAPI(req, res) {
 
             if (result.rows.length > 0) {
                 const session = result.rows[0];
-                // Если telegram_id получен через JOIN - используем его, иначе возвращаем user_id
                 const userIdForClient = session.telegram_id || session.user_id;
+                logger.info('API', 'Auth check success', { request_id, user_id: userIdForClient });
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({
                     success: true,
@@ -351,11 +457,16 @@ async function handleAuthAPI(req, res) {
                     last_name: session.last_name
                 }));
             } else {
+                logger.info('API', 'Auth check: not authorized', { request_id });
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ success: true, authorized: false }));
             }
         } catch (error) {
-            console.error('Ошибка проверки авторизации:', error);
+            logger.error('API', 'Auth check error', {
+                request_id,
+                error: error.message,
+                stack: error.stack
+            });
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: false, error: 'Ошибка сервера' }));
         }
@@ -371,8 +482,11 @@ async function handleAuthAPI(req, res) {
                 const data = JSON.parse(body);
                 const { user_id, auth_token, username, first_name, last_name } = data;
 
-                console.log(`🔔 [API] Получен запрос авторизации: user_id=${user_id}, token=${auth_token}`);
-                console.log(`🔔 [API] Данные пользователя: username=${username}, first_name=${first_name}, last_name=${last_name}`);
+                logger.info('API', 'Получен запрос авторизации', {
+                    request_id,
+                    user_id,
+                    token: auth_token ? auth_token.substring(0, 20) + '...' : 'N/A'
+                });
 
                 if (auth_token && auth_token.startsWith('auth_')) {
                     await pool.query(`
@@ -384,13 +498,10 @@ async function handleAuthAPI(req, res) {
                             last_name = EXCLUDED.last_name
                     `, [user_id, username, first_name, last_name]);
 
-                    authSessions.set(auth_token, {
-                        user_id: user_id,
-                        username: username,
-                        first_name: first_name,
-                        last_name: last_name,
-                        authorized: true,
-                        timestamp: Date.now()
+                    logger.info('API', 'Авторизация подтверждена', {
+                        request_id,
+                        user_id,
+                        username
                     });
 
                     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -401,14 +512,17 @@ async function handleAuthAPI(req, res) {
                         username: username,
                         first_name: first_name
                     }));
-
-                    console.log(`Авторизация подтверждена для user_id=${user_id}, username=@${username}`);
                 } else {
+                    logger.warn('API', 'Неверный токен', { request_id, token: auth_token });
                     res.writeHead(400, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({ success: false, error: 'Неверный токен' }));
                 }
             } catch (error) {
-                console.error('Ошибка при обработке авторизации:', error);
+                logger.error('API', 'Ошибка при обработке авторизации', {
+                    request_id,
+                    error: error.message,
+                    stack: error.stack
+                });
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ success: false, error: 'Ошибка сервера' }));
             }
@@ -441,10 +555,15 @@ async function handleAuthAPI(req, res) {
                 }
             }
         } catch (error) {
-            console.error('Ошибка проверки прав администратора:', error);
+            logger.error('API', 'Ошибка проверки прав администратора', {
+                request_id,
+                error: error.message,
+                stack: error.stack
+            });
         }
 
         if (!isAdmin) {
+            logger.warn('API', 'Доступ запрещён - не админ', { request_id });
             res.writeHead(403, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Доступ запрещён' }));
             return;
@@ -460,9 +579,18 @@ async function handleAuthAPI(req, res) {
                 LEFT JOIN business_processes bp ON u.id = bp.user_id
                 ORDER BY u.created_at DESC
             `);
+            logger.info('API', 'Получен список пользователей', {
+                request_id,
+                count: result.rows.length
+            });
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ users: result.rows }));
         } catch (err) {
+            logger.error('API', 'Ошибка получения пользователей', {
+                request_id,
+                error: err.message,
+                stack: err.stack
+            });
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Ошибка базы данных' }));
         }
@@ -484,6 +612,7 @@ async function handleAuthAPI(req, res) {
 
             const row = result.rows[0];
             if (row) {
+                logger.info('API', 'Профиль получен', { request_id, user_id: userId });
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({
                     success: true,
@@ -494,10 +623,16 @@ async function handleAuthAPI(req, res) {
                     }
                 }));
             } else {
+                logger.info('API', 'Профиль не найден', { request_id, user_id: userId });
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ success: true, profile: null }));
             }
         } catch (err) {
+            logger.error('API', 'Ошибка получения профиля', {
+                request_id,
+                error: err.message,
+                stack: err.stack
+            });
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Ошибка базы данных' }));
         }
@@ -513,10 +648,17 @@ async function handleAuthAPI(req, res) {
                 const data = JSON.parse(body);
                 const { user_id, company, department, job_title } = data;
 
-                console.log(`Сохранение профиля: user_id=${user_id}, company=${company}, department=${department}, job=${job_title}`);
+                logger.info('API', 'Сохранение профиля', {
+                    request_id,
+                    user_id,
+                    company,
+                    department,
+                    job_title
+                });
 
                 const userResult = await pool.query('SELECT id FROM users WHERE telegram_id = $1', [user_id]);
                 if (userResult.rows.length === 0) {
+                    logger.warn('API', 'Пользователь не найден', { request_id, user_id });
                     res.writeHead(500, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({ success: false, error: 'Пользователь не найден' }));
                     return;
@@ -534,11 +676,15 @@ async function handleAuthAPI(req, res) {
                         updated_at = NOW()
                 `, [internalId, company, department, job_title]);
 
-                console.log('Профиль сохранён для user_id=' + user_id);
+                logger.info('API', 'Профиль сохранён', { request_id, user_id });
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ success: true }));
             } catch (error) {
-                console.error('Ошибка при сохранении профиля:', error);
+                logger.error('API', 'Ошибка при сохранении профиля', {
+                    request_id,
+                    error: error.message,
+                    stack: error.stack
+                });
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ success: false, error: 'Ошибка сервера' }));
             }
@@ -553,8 +699,9 @@ async function handleAuthAPI(req, res) {
         try {
             const userResult = await pool.query('SELECT id FROM users WHERE telegram_id = $1', [userId]);
             if (userResult.rows.length === 0) {
-                res.writeHead(500, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'Ошибка базы данных' }));
+                logger.warn('API', 'Пользователь не найден для бизнес-процесса', { request_id, user_id: userId });
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Пользователь не найден' }));
                 return;
             }
 
@@ -563,6 +710,7 @@ async function handleAuthAPI(req, res) {
 
             if (result.rows[0]) {
                 const row = result.rows[0];
+                logger.info('API', 'Бизнес-процесс получен', { request_id, user_id: userId });
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({
                     success: true,
@@ -574,10 +722,16 @@ async function handleAuthAPI(req, res) {
                     }
                 }));
             } else {
+                logger.info('API', 'Бизнес-процесс не найден', { request_id, user_id: userId });
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ success: true, process: null }));
             }
         } catch (err) {
+            logger.error('API', 'Ошибка получения бизнес-процесса', {
+                request_id,
+                error: err.message,
+                stack: err.stack
+            });
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Ошибка базы данных' }));
         }
@@ -595,6 +749,7 @@ async function handleAuthAPI(req, res) {
 
                 const userResult = await pool.query('SELECT id FROM users WHERE telegram_id = $1', [user_id]);
                 if (userResult.rows.length === 0) {
+                    logger.warn('API', 'Пользователь не найден', { request_id, user_id });
                     res.writeHead(500, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({ success: false, error: 'Пользователь не найден' }));
                     return;
@@ -614,11 +769,15 @@ async function handleAuthAPI(req, res) {
                         updated_at = NOW()
                 `, [internalId, main_tasks, work_process, systems_used, process_description]);
 
-                console.log('Бизнес-процесс сохранён для user_id=' + user_id);
+                logger.info('API', 'Бизнес-процесс сохранён', { request_id, user_id });
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ success: true }));
             } catch (error) {
-                console.error('Ошибка при сохранении бизнес-процесса:', error);
+                logger.error('API', 'Ошибка при сохранении бизнес-процесса', {
+                    request_id,
+                    error: error.message,
+                    stack: error.stack
+                });
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ success: false, error: 'Ошибка сервера' }));
             }
@@ -661,8 +820,15 @@ async function handleAuthAPI(req, res) {
                 const data = JSON.parse(body);
                 const { user_id, question_id, answer_text, comment_text } = data;
 
+                logger.info('API', 'Сохранение ответа на вопрос', {
+                    request_id,
+                    user_id,
+                    question_id
+                });
+
                 const userResult = await pool.query('SELECT id FROM users WHERE telegram_id = $1', [user_id]);
                 if (userResult.rows.length === 0) {
+                    logger.warn('API', 'Пользователь не найден', { request_id, user_id });
                     res.writeHead(500, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({ success: false, error: 'Пользователь не найден' }));
                     return;
@@ -679,10 +845,15 @@ async function handleAuthAPI(req, res) {
                         answered_at = NOW()
                 `, [internalId, question_id, answer_text, comment_text]);
 
+                logger.info('API', 'Ответ сохранён', { request_id, user_id, question_id });
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ success: true }));
             } catch (error) {
-                console.error('Ошибка при сохранении ответа:', error);
+                logger.error('API', 'Ошибка при сохранении ответа', {
+                    request_id,
+                    error: error.message,
+                    stack: error.stack
+                });
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ success: false, error: 'Ошибка сервера' }));
             }
@@ -697,7 +868,6 @@ async function handleAuthAPI(req, res) {
         const tokenToCheck = token ? token.replace('Bearer ', '') : null;
 
         try {
-            // Проверяем сессию в БД
             if (tokenToCheck) {
                 const sessionResult = await pool.query(`
                     SELECT s.user_id, u.telegram_id
@@ -708,17 +878,21 @@ async function handleAuthAPI(req, res) {
 
                 if (sessionResult.rows.length > 0) {
                     const telegramId = sessionResult.rows[0].telegram_id;
-                    // Проверяем telegram_id если он доступен
                     if (telegramId && telegramId === ADMIN_USER_ID) {
                         isAdmin = true;
                     }
                 }
             }
         } catch (error) {
-            console.error('Ошибка проверки прав администратора:', error);
+            logger.error('API', 'Ошибка проверки прав администратора', {
+                request_id,
+                error: error.message,
+                stack: error.stack
+            });
         }
 
         if (!isAdmin) {
+            logger.warn('API', 'Доступ запрещён - не админ', { request_id });
             res.writeHead(403, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Доступ запрещён' }));
             return;
@@ -729,6 +903,7 @@ async function handleAuthAPI(req, res) {
         try {
             const userResult = await pool.query('SELECT id FROM users WHERE telegram_id = $1', [telegramUserId]);
             if (userResult.rows.length === 0) {
+                logger.warn('API', 'Пользователь не найден', { request_id, user_id: telegramUserId });
                 res.writeHead(404, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ error: 'Пользователь не найден' }));
                 return;
@@ -758,28 +933,41 @@ async function handleAuthAPI(req, res) {
 }
 
 function handleRequest(req, res) {
+    const request_id = generateRequestId();
+    const startTime = Date.now();
+    
+    // Добавляем request_id в заголовки ответа
+    res.setHeader('X-Request-ID', request_id);
+    
+    // Health check endpoint
+    if (req.url === '/health' || req.url === '/api/health') {
+        handleHealthCheck(req, res, request_id);
+        return;
+    }
+    
     // Тестовый endpoint для проверки версии
     if (req.url === '/version.json') {
-        res.writeHead(200, { 
+        logger.info('HTTP', 'Request /version.json', { request_id });
+        res.writeHead(200, {
             'Content-Type': 'application/json',
             'Cache-Control': 'no-store'
         });
-        res.end(JSON.stringify({ 
+        res.end(JSON.stringify({
             version: '2026-02-20-admin-fix',
             timestamp: Date.now()
         }));
         return;
     }
-    
+
     // Админка через сервер для обхода кэша
     if (req.url === '/admin.html' || req.url === '/admin-new.html') {
         const fs = require('fs');
         const path = require('path');
         const filePath = path.join(STATIC_DIR, 'admin.html');
-        
+
         if (fs.existsSync(filePath)) {
             const content = fs.readFileSync(filePath);
-            res.writeHead(200, { 
+            res.writeHead(200, {
                 'Content-Type': 'text/html',
                 'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
                 'Pragma': 'no-cache',
@@ -789,24 +977,80 @@ function handleRequest(req, res) {
             return;
         }
     }
-    
+
     if (req.url.startsWith('/api/')) {
-        handleAuthAPI(req, res);
+        handleAuthAPI(req, res, request_id, startTime);
         return;
     }
+    
+    // Логируем запрос к статике
+    logger.debug('HTTP', `Static request: ${req.url}`, { request_id });
     serveStatic(req, res);
+}
+
+// Health check handler
+async function handleHealthCheck(req, res, request_id) {
+    const startTime = Date.now();
+    
+    try {
+        // Проверяем подключение к БД
+        await pool.query('SELECT 1');
+        const dbStatus = 'healthy';
+        
+        // Проверяем бота
+        const botStatus = botInitialized ? 'healthy' : 'not_initialized';
+        
+        const health = {
+            status: 'healthy',
+            timestamp: new Date().toISOString(),
+            services: {
+                database: dbStatus,
+                bot: botStatus
+            },
+            uptime: process.uptime()
+        };
+        
+        logger.info('HEALTH', 'Health check passed', {
+            request_id,
+            health_status: health.status,
+            response_time_ms: Date.now() - startTime
+        });
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(health));
+    } catch (error) {
+        const health = {
+            status: 'unhealthy',
+            timestamp: new Date().toISOString(),
+            error: error.message,
+            uptime: process.uptime()
+        };
+        
+        logger.error('HEALTH', 'Health check failed', {
+            request_id,
+            error: error.message,
+            response_time_ms: Date.now() - startTime
+        });
+        
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(health));
+    }
 }
 
 // Инициализация и запуск сервера
 async function startServer() {
-    console.log('🔧 Запуск сервера...');
-    console.log('🔧 NODE_ENV:', process.env.NODE_ENV || 'not set');
-    console.log('🔧 PORT:', process.env.PORT || PORT);
-    console.log('🔧 DATABASE_URL:', process.env.DATABASE_URL ? 'задан (длина: ' + process.env.DATABASE_URL.length + ')' : 'НЕ задан');
-    console.log('🔧 WEBAPP_URL:', process.env.WEBAPP_URL || 'not set');
+    const request_id = generateRequestId();
+    
+    logger.info('SERVER', 'Запуск сервера...', {
+        request_id,
+        NODE_ENV: process.env.NODE_ENV || 'not set',
+        PORT: process.env.PORT || PORT,
+        DATABASE_URL: process.env.DATABASE_URL ? 'задан (длина: ' + process.env.DATABASE_URL.length + ')' : 'НЕ задан',
+        WEBAPP_URL: process.env.WEBAPP_URL || 'not set'
+    });
 
     await initDatabase();
-    
+
     // Инициализируем Telegram бота после подключения к БД
     initTelegramBot();
 
@@ -816,12 +1060,11 @@ async function startServer() {
     const listenPort = process.env.PORT || PORT;
     server.listen(listenPort, '0.0.0.0', () => {
         const actualUrl = process.env.WEBAPP_URL || `http://localhost:${listenPort}`;
-        console.log('='.repeat(50));
-        console.log('✅ Сервер авторизации запущен!');
-        console.log('='.repeat(50));
-        console.log('URL:', actualUrl);
-        console.log('Остановить: Ctrl+C');
-        console.log('='.repeat(50));
+        logger.info('SERVER', 'Сервер авторизации запущен!', {
+            request_id,
+            url: actualUrl,
+            port: listenPort
+        });
     });
 }
 
