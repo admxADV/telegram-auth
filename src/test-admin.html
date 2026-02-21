@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <title>Тест админки</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #667eea; color: white; }
+        .card { background: white; color: black; padding: 20px; border-radius: 10px; max-width: 600px; margin: 0 auto; }
+        button { padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }
+        pre { background: #f0f0f0; padding: 10px; border-radius: 5px; overflow: auto; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>🔧 Тест админки</h1>
+        <div id="status">Загрузка...</div>
+        <h2>Действия:</h2>
+        <button onclick="checkSession()">Проверить сессию</button>
+        <button onclick="loadUsers()">Загрузить пользователей</button>
+        <button onclick="viewTestAnswers()">Тестовые ответы</button>
+        <button onclick="logout()">Выйти</button>
+        <h2>Лог:</h2>
+        <pre id="log"></pre>
+    </div>
+
+    <script>
+    const ADMIN_USER_ID = 5093303797;
+    
+    function log(msg) {
+        document.getElementById('log').textContent += msg + '\n';
+        console.log(msg);
+    }
+
+    function checkSession() {
+        const token = sessionStorage.getItem('auth_session');
+        log('Токен: ' + (token ? token.substring(0, 30) + '...' : 'НЕТ'));
+        
+        fetch('/api/auth/check/' + token)
+            .then(r => r.json())
+            .then(d => {
+                log('Сессия: ' + JSON.stringify(d, null, 2));
+                if (d.authorized && d.user_id == ADMIN_USER_ID) {
+                    log('✅ ВЫ АДМИН!');
+                } else if (d.authorized) {
+                    log('⚠️ Вы авторизованы, но НЕ админ (user_id=' + d.user_id + ')');
+                } else {
+                    log('❌ Не авторизованы');
+                }
+            })
+            .catch(e => log('Ошибка: ' + e.message));
+    }
+
+    function loadUsers() {
+        const token = sessionStorage.getItem('auth_session');
+        log('Загрузка пользователей...');
+        
+        fetch('/api/admin/users', {
+            headers: { 'Authorization': 'Bearer ' + token }
+        })
+        .then(r => {
+            log('Статус: ' + r.status);
+            return r.json();
+        })
+        .then(d => {
+            log('Пользователи: ' + JSON.stringify(d, null, 2));
+        })
+        .catch(e => log('Ошибка: ' + e.message));
+    }
+
+    function viewTestAnswers() {
+        const token = sessionStorage.getItem('auth_session');
+        log('Загрузка ответов теста...');
+        
+        fetch('/api/admin/quiz-answers/7273603260', {
+            headers: { 'Authorization': 'Bearer ' + token }
+        })
+        .then(r => {
+            log('Статус: ' + r.status);
+            return r.json();
+        })
+        .then(d => {
+            log('Ответы: ' + JSON.stringify(d, null, 2));
+        })
+        .catch(e => log('Ошибка: ' + e.message));
+    }
+
+    function logout() {
+        sessionStorage.removeItem('auth_session');
+        log('Сессия очищена. Обновите страницу.');
+    }
+
+    // Автозапуск
+    window.onload = function() {
+        log('Страница загружена');
+        log('ADMIN_USER_ID = ' + ADMIN_USER_ID);
+        checkSession();
+    };
+    </script>
+</body>
+</html>
