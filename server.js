@@ -329,10 +329,12 @@ async function handleAuthAPI(req, res) {
 
         try {
             // Читаем сессию из БД
+            // JOIN с users для получения telegram_id
             const result = await pool.query(`
-                SELECT user_id, username, first_name, last_name, authorized
-                FROM auth_sessions
-                WHERE token = $1 AND authorized = true
+                SELECT s.user_id, s.username, s.first_name, s.last_name, s.authorized, u.telegram_id
+                FROM auth_sessions s
+                LEFT JOIN users u ON s.user_id = u.id
+                WHERE s.token = $1 AND s.authorized = true
             `, [token]);
 
             if (result.rows.length > 0) {
@@ -341,7 +343,7 @@ async function handleAuthAPI(req, res) {
                 res.end(JSON.stringify({
                     success: true,
                     authorized: true,
-                    user_id: session.user_id,
+                    user_id: session.telegram_id, // Возвращаем telegram_id для проверки админ-прав
                     username: session.username,
                     first_name: session.first_name,
                     last_name: session.last_name
@@ -422,13 +424,15 @@ async function handleAuthAPI(req, res) {
             // Проверяем сессию в БД
             if (tokenToCheck) {
                 const sessionResult = await pool.query(`
-                    SELECT user_id FROM auth_sessions
-                    WHERE token = $1 AND authorized = true
+                    SELECT s.user_id, u.telegram_id
+                    FROM auth_sessions s
+                    LEFT JOIN users u ON s.user_id = u.id
+                    WHERE s.token = $1 AND s.authorized = true
                 `, [tokenToCheck]);
 
                 if (sessionResult.rows.length > 0) {
-                    const userId = sessionResult.rows[0].user_id;
-                    if (userId === ADMIN_USER_ID) {
+                    const telegramId = sessionResult.rows[0].telegram_id;
+                    if (telegramId === ADMIN_USER_ID) {
                         isAdmin = true;
                     }
                 }
@@ -693,13 +697,15 @@ async function handleAuthAPI(req, res) {
             // Проверяем сессию в БД
             if (tokenToCheck) {
                 const sessionResult = await pool.query(`
-                    SELECT user_id FROM auth_sessions
-                    WHERE token = $1 AND authorized = true
+                    SELECT s.user_id, u.telegram_id
+                    FROM auth_sessions s
+                    LEFT JOIN users u ON s.user_id = u.id
+                    WHERE s.token = $1 AND s.authorized = true
                 `, [tokenToCheck]);
 
                 if (sessionResult.rows.length > 0) {
-                    const userId = sessionResult.rows[0].user_id;
-                    if (userId === ADMIN_USER_ID) {
+                    const telegramId = sessionResult.rows[0].telegram_id;
+                    if (telegramId === ADMIN_USER_ID) {
                         isAdmin = true;
                     }
                 }
