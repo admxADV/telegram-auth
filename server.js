@@ -736,6 +736,19 @@ async function handleAuthAPI(req, res) {
 }
 
 function handleRequest(req, res) {
+    // Тестовый endpoint для проверки версии
+    if (req.url === '/version.json') {
+        res.writeHead(200, { 
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store'
+        });
+        res.end(JSON.stringify({ 
+            version: '2026-02-20-admin-fix',
+            timestamp: Date.now()
+        }));
+        return;
+    }
+    
     // Админка через сервер для обхода кэша
     if (req.url === '/admin.html' || req.url === '/admin-new.html') {
         const fs = require('fs');
