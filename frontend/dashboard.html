@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Личный кабинет - TREND</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        /* Dashboard styles */
+        .dashboard {
+            display: flex;
+            flex: 1;
+            min-height: 100vh;
+            background: #f5f7fa;
+            padding: 20px;
+        }
+
+        /* Left sidebar */
+        .sidebar {
+            width: 320px;
+            background: #ffffff;
+            border-right: 1px solid #e1e4e8;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            border-radius: 16px 0 0 16px;
+            box-shadow: 2px 0 8px rgba(0,0,0,0.05);
+        }
+
+        .sidebar-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 24px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid #e1e4e8;
+        }
+
+        .user-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 18px;
+        }
+
+        .user-info h2 {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1a1a1a;
+            margin: 0;
+        }
+
+        .user-info p {
+            font-size: 13px;
+            color: #666;
+            margin: 4px 0 0 0;
+        }
+
+        .tests-list {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .logo-footer {
+            padding: 16px;
+            text-align: center;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .footer-logo {
+            max-width: 180px;
+            height: auto;
+            opacity: 0.8;
+            transition: opacity 0.3s ease;
+        }
+
+        .footer-logo:hover {
+            opacity: 1;
+        }
+
+        .admin-link-wrapper {
+            padding: 12px 16px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .admin-link {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .admin-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .admin-icon {
+            width: 18px;
+            height: 18px;
+        }
+
+        .logout-wrapper {
+            padding: 16px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .logout-btn {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px 16px;
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            color: #666;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .logout-btn:hover {
+            background: #ffebee;
+            border-color: #ff5252;
+            color: #d32f2f;
+        }
+
+        .logout-icon {
+            width: 18px;
+            height: 18px;
+        }
+
+        .test-item {
+            padding: 16px;
+            border-radius: 12px;
+            background: #f8f9fa;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 2px solid transparent;
+        }
+
+        .test-item:hover {
+            background: #f0f2f5;
+            transform: translateX(4px);
+        }
+
+        .test-item.active {
+            background: #f0f4ff;
+            border-color: #667eea;
+        }
+
+        .test-item.completed {
+            border-left: 4px solid #4caf50;
+        }
+
+        /* Все тесты доступны */
+        .test-item.locked {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .test-item.locked:hover {
+            transform: none;
+            background: #f8f9fa;
+        }
+
+        .test-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #1a1a1a;
+            margin-bottom: 8px;
+        }
+
+        .test-progress {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .progress-bar {
+            flex: 1;
+            height: 6px;
+            background: #e1e4e8;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            border-radius: 3px;
+            transition: width 0.3s ease;
+        }
+
+        .progress-text {
+            font-size: 12px;
+            color: #666;
+            min-width: 40px;
+            text-align: right;
+        }
+
+        /* Main content */
+        .main-content {
+            flex: 1;
+            padding: 32px;
+            overflow-y: auto;
+            border-radius: 0 16px 16px 0;
+            box-shadow: -2px 0 8px rgba(0,0,0,0.05);
+            background: #ffffff;
+        }
+
+        .content-header {
+            margin-bottom: 24px;
+        }
+
+        .content-header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            color: #1a1a1a;
+            margin: 0 0 8px 0;
+        }
+
+        .content-header p {
+            font-size: 14px;
+            color: #666;
+            margin: 0;
+        }
+
+        /* Test form */
+        .test-form {
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 32px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .question {
+            margin-bottom: 32px;
+        }
+
+        .question-number {
+            font-size: 12px;
+            font-weight: 600;
+            color: #667eea;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .question-text {
+            font-size: 16px;
+            font-weight: 500;
+            color: #1a1a1a;
+            margin-bottom: 16px;
+        }
+
+        .options {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .option {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 14px 16px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 2px solid transparent;
+        }
+
+        .option:hover {
+            background: #f0f2f5;
+        }
+
+        .option.selected {
+            background: #f0f4ff;
+            border-color: #667eea;
+        }
+
+        .option input[type="radio"],
+        .option input[type="checkbox"] {
+            margin-top: 3px;
+            accent-color: #667eea;
+        }
+
+        .option-text {
+            font-size: 14px;
+            color: #333;
+            line-height: 1.5;
+        }
+
+        .text-input {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid #e1e4e8;
+            border-radius: 10px;
+            font-size: 14px;
+            transition: border-color 0.2s ease;
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .text-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-top: 32px;
+            padding-top: 24px;
+            border-top: 1px solid #e1e4e8;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: none;
+        }
+
+        .btn-secondary {
+            background: #f0f2f5;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #e1e4e8;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a6fd6;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        /* Welcome state */
+        .welcome-state {
+            text-align: center;
+            padding: 80px 40px;
+            background: #ffffff;
+            border-radius: 16px;
+        }
+
+        .welcome-icon {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .welcome-icon svg {
+            width: 40px;
+            height: 40px;
+            fill: white;
+        }
+
+        .welcome-state h2 {
+            font-size: 24px;
+            font-weight: 600;
+            color: #1a1a1a;
+            margin: 0 0 12px 0;
+        }
+
+        .welcome-state p {
+            font-size: 16px;
+            color: #666;
+            margin: 0;
+        }
+
+        /* Select department */
+        .select-group {
+            margin-bottom: 20px;
+        }
+
+        .select-label {
+            font-size: 14px;
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .select-input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e1e4e8;
+            border-radius: 10px;
+            font-size: 14px;
+            background: white;
+            cursor: pointer;
+        }
+
+        .select-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .dashboard {
+                flex-direction: column;
+            }
+
+            .sidebar {
+                width: 100%;
+                border-right: none;
+                border-bottom: 1px solid #e1e4e8;
+            }
+
+            .main-content {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <!-- Left Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="user-avatar" id="user-avatar">U</div>
+                <div class="user-info">
+                    <h2 id="user-name">Пользователь</h2>
+                    <p id="user-status">Личный кабинет</p>
+                </div>
+            </div>
+
+            <div class="tests-list" id="tests-list">
+                <!-- Tests will be loaded here -->
+            </div>
+
+            <div class="logo-footer">
+                <img src="assets/logo.png" alt="TREND" class="footer-logo">
+            </div>
+
+            <div class="admin-link-wrapper" id="admin-link-wrapper" style="display: none;">
+                <a href="admin.html" class="admin-link">
+                    <svg viewBox="0 0 24 24" fill="currentColor" class="admin-icon">
+                        <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/>
+                    </svg>
+                    <span>Админ</span>
+                </a>
+            </div>
+
+            <div class="logout-wrapper">
+                <button class="logout-btn" onclick="logout()">
+                    <svg viewBox="0 0 24 24" fill="currentColor" class="logout-icon">
+                        <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/>
+                    </svg>
+                    <span>Выйти</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content" id="main-content">
+            <!-- Content will be loaded here -->
+        </main>
+    </div>
+
+    <script src="dashboard.js"></script>
+</body>
+</html>

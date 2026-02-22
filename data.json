@@ -1,0 +1,59 @@
+{
+  "users": {
+    "user_7451122706": {
+      "id": "user_7451122706",
+      "telegramId": "7451122706",
+      "username": null,
+      "firstName": null,
+      "lastName": null,
+      "createdAt": "2026-02-22T20:24:54.507Z"
+    }
+  },
+  "sessions": {},
+  "testResults": {
+    "7451122706_3": {
+      "userId": "7451122706",
+      "testId": 3,
+      "answers": {
+        "q1": "d",
+        "q2": "c",
+        "q3": "",
+        "q4": "",
+        "q5": "",
+        "q6": "",
+        "q7": "",
+        "q8": "",
+        "q9": "",
+        "q10": "",
+        "q11": "",
+        "q12": "",
+        "q13": "",
+        "q14": "",
+        "q15": "",
+        "q16": "",
+        "q17": "",
+        "q18": "c",
+        "q19": "d",
+        "q20": "d"
+      },
+      "progress": 25,
+      "completedAt": "2026-02-22T20:24:54.507Z"
+    },
+    "7451122706_1": {
+      "userId": "7451122706",
+      "testId": 1,
+      "answers": {
+        "dept": "training",
+        "position": "у",
+        "tasks": "crm",
+        "systems": [
+          "excel",
+          "messaging"
+        ],
+        "pain": "у"
+      },
+      "progress": 100,
+      "completedAt": "2026-02-22T20:45:17.564Z"
+    }
+  }
+}

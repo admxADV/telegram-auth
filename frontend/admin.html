@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Админ панель - TREND</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f7fa;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .admin-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 24px;
+            border-radius: 16px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+
+        .admin-header h1 {
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+
+        .admin-header p {
+            opacity: 0.9;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: white;
+            text-decoration: none;
+            margin-top: 16px;
+            padding: 8px 16px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 8px;
+            transition: background 0.3s;
+        }
+
+        .back-link:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        .users-container {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        .users-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #e1e4e8;
+        }
+
+        .users-header h2 {
+            font-size: 20px;
+            color: #1a1a1a;
+        }
+
+        .users-count {
+            background: #667eea;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .user-card {
+            border: 1px solid #e1e4e8;
+            border-radius: 12px;
+            margin-bottom: 16px;
+            overflow: hidden;
+        }
+
+        .user-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px;
+            background: #f8f9fa;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .user-header:hover {
+            background: #f0f2f5;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+        }
+
+        .user-name {
+            font-weight: 600;
+            color: #1a1a1a;
+        }
+
+        .user-username {
+            font-size: 13px;
+            color: #666;
+        }
+
+        .user-stats {
+            display: flex;
+            gap: 16px;
+        }
+
+        .stat-badge {
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .stat-badge.tests {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .stat-badge.progress {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+
+        .expand-icon {
+            transition: transform 0.3s;
+        }
+
+        .expand-icon.expanded {
+            transform: rotate(180deg);
+        }
+
+        .user-details {
+            display: none;
+            padding: 16px;
+            border-top: 1px solid #e1e4e8;
+        }
+
+        .user-details.visible {
+            display: block;
+        }
+
+        .detail-section {
+            margin-bottom: 16px;
+        }
+
+        .detail-section h4 {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        .test-result {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+
+        .test-result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .test-name {
+            font-weight: 600;
+            color: #1a1a1a;
+        }
+
+        .test-progress {
+            background: #667eea;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .test-answers {
+            font-size: 13px;
+            color: #666;
+        }
+
+        .test-answers p {
+            margin-bottom: 4px;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #667eea;
+        }
+
+        .refresh-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.3s;
+        }
+
+        .refresh-btn:hover {
+            background: #5a6fd6;
+        }
+
+        @media (max-width: 768px) {
+            .user-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 12px;
+            }
+
+            .user-stats {
+                width: 100%;
+                justify-content: space-between;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="admin-header">
+        <h1>Админ панель</h1>
+        <p>Все пользователи и их результаты тестов</p>
+        <a href="/dashboard.html" class="back-link">
+            ← Вернуться к тестам
+        </a>
+    </div>
+
+    <div class="users-container">
+        <div class="users-header">
+            <h2>Пользователи</h2>
+            <div style="display: flex; align-items: center; gap: 16px;">
+                <span class="users-count" id="users-count">0</span>
+                <button class="refresh-btn" onclick="loadUsers()">Обновить</button>
+            </div>
+        </div>
+
+        <div id="users-list">
+            <div class="loading">Загрузка...</div>
+        </div>
+    </div>
+
+    <script>
+        // Test questions data (from dashboard.js)
+        const TEST_QUESTIONS = {
+            1: [
+                { id: 'dept', text: 'Выберите отдел', options: [
+                    { value: 'sales', label: 'Отдел продаж' },
+                    { value: 'recruitment', label: 'Подбор персонала' },
+                    { value: 'training', label: 'Обучение персонала' },
+                    { value: 'marketing', label: 'Маркетинг' },
+                    { value: 'legal', label: 'Юридический отдел' },
+                    { value: 'other', label: 'Другое' }
+                ]},
+                { id: 'position', text: 'Какая у вас должность?' },
+                { id: 'tasks', text: 'Откуда берутся ваши задачи?', options: [
+                    { value: 'crm', label: 'Задачи в CRM' },
+                    { value: 'meeting', label: 'Планерки / устные указания' },
+                    { value: 'self', label: 'Сам планирую' },
+                    { value: 'clients', label: 'От клиентов' },
+                    { value: 'other', label: 'Другое' }
+                ]},
+                { id: 'systems', text: 'Какими системами пользуетесь ежедневно?', options: [
+                    { value: 'crm', label: 'CRM система' },
+                    { value: 'excel', label: 'Excel / Google Таблицы' },
+                    { value: 'messaging', label: 'Telegram / WhatsApp' },
+                    { value: 'realty', label: 'Авито / Циан / Домклик' },
+                    { value: '1c', label: '1С / финансы' }
+                ]},
+                { id: 'pain', text: 'Что больше всего тормозит вашу работу?' }
+            ],
+            2: [
+                { id: 'experience', text: 'Сколько лет вы работаете в компании?', options: [
+                    { value: 'less1', label: 'Менее 1 года' },
+                    { value: '1_3', label: '1-3 года' },
+                    { value: '3_5', label: '3-5 лет' },
+                    { value: 'more5', label: 'Более 5 лет' }
+                ]},
+                { id: 'goals', text: 'Какие у вас основные KPI?' },
+                { id: 'achievements', text: 'Какой ваш главный профессиональный успех?' },
+                { id: 'improvements', text: 'Что бы вы изменили в своей работе?' }
+            ],
+            3: [
+                { id: 'q1', text: '1. Что такое KPI?', options: [
+                    { value: 'a', label: 'Ключевой показатель эффективности' },
+                    { value: 'b', label: 'Компьютерная программа' },
+                    { value: 'c', label: 'Кадровый процесс' },
+                    { value: 'd', label: 'Корпоративная культура' }
+                ]},
+                { id: 'q2', text: '2. Какая CRM используется в компании?', options: [
+                    { value: 'a', label: 'amoCRM' },
+                    { value: 'b', label: 'Битрикс24' },
+                    { value: 'c', label: 'Salesforce' },
+                    { value: 'd', label: 'Не знаю' }
+                ]},
+                { id: 'q3', text: '3. Какой документ подтверждает сделку?', options: [
+                    { value: 'a', label: 'Договор' },
+                    { value: 'b', label: 'Скриншот' },
+                    { value: 'c', label: 'Сообщение в WhatsApp' },
+                    { value: 'd', label: 'Звонок' }
+                ]},
+                { id: 'q4', text: '4. Что такое холодный звонок?', options: [
+                    { value: 'a', label: 'Звонок без предварительной договорённости' },
+                    { value: 'b', label: 'Звонок зимой' },
+                    { value: 'c', label: 'Звонок клиенту' },
+                    { value: 'd', label: 'Звонок руководителю' }
+                ]},
+                { id: 'q5', text: '5. Что такое конверсия?', options: [
+                    { value: 'a', label: 'Процент успешных действий' },
+                    { value: 'b', label: 'Количество клиентов' },
+                    { value: 'c', label: 'Сумма сделки' },
+                    { value: 'd', label: 'Время разговора' }
+                ]},
+                { id: 'q6', text: '6. Какой канал коммуникации предпочтительнее?', options: [
+                    { value: 'a', label: 'Telegram' },
+                    { value: 'b', label: 'Телефонный звонок' },
+                    { value: 'c', label: 'Email' },
+                    { value: 'd', label: 'Личная встреча' }
+                ]},
+                { id: 'q7', text: '7. Что такое воронка продаж?', options: [
+                    { value: 'a', label: 'Этапы работы с клиентом' },
+                    { value: 'b', label: 'Труба для воды' },
+                    { value: 'c', label: 'Маркетинговый инструмент' },
+                    { value: 'd', label: 'CRM система' }
+                ]},
+                { id: 'q8', text: '8. Какой документ обязателен для сделки?', options: [
+                    { value: 'a', label: 'Договор' },
+                    { value: 'b', label: 'Чек' },
+                    { value: 'c', label: 'Смета' },
+                    { value: 'd', label: 'Акт' }
+                ]},
+                { id: 'q9', text: '9. Что такое лид?', options: [
+                    { value: 'a', label: 'Потенциальный клиент' },
+                    { value: 'b', label: 'Постоянный клиент' },
+                    { value: 'c', label: 'Партнёр' },
+                    { value: 'd', label: 'Конкурент' }
+                ]},
+                { id: 'q10', text: '10. Что такое upsell?', options: [
+                    { value: 'a', label: 'Продажа дополнительного товара' },
+                    { value: 'b', label: 'Повышение цены' },
+                    { value: 'c', label: 'Увольнение клиента' },
+                    { value: 'd', label: 'Снижение качества' }
+                ]},
+                { id: 'q11', text: '11. Что такое ROI?', options: [
+                    { value: 'a', label: 'Рентабельность инвестиций' },
+                    { value: 'b', label: 'Доход сотрудника' },
+                    { value: 'c', label: 'Расходы компании' },
+                    { value: 'd', label: 'Прибыль' }
+                ]},
+                { id: 'q12', text: '12. Что такое B2B?', options: [
+                    { value: 'a', label: 'Продажи между компаниями' },
+                    { value: 'b', label: 'Продажи частным лицам' },
+                    { value: 'c', label: 'Международная торговля' },
+                    { value: 'd', label: 'Оптовая торговля' }
+                ]},
+                { id: 'q13', text: '13. Что такое CJM?', options: [
+                    { value: 'a', label: 'Карта пути клиента' },
+                    { value: 'b', label: 'Менеджер по продажам' },
+                    { value: 'c', label: 'Система контроля' },
+                    { value: 'd', label: 'План работы' }
+                ]},
+                { id: 'q14', text: '14. Что такое NPS?', options: [
+                    { value: 'a', label: 'Индекс лояльности клиентов' },
+                    { value: 'b', label: 'Номер телефона' },
+                    { value: 'c', label: 'Система оценки' },
+                    { value: 'd', label: 'Отдел продаж' }
+                ]},
+                { id: 'q15', text: '15. Что такое LTV?', options: [
+                    { value: 'a', label: 'Пожизненная ценность клиента' },
+                    { value: 'b', label: 'Время разговора' },
+                    { value: 'c', label: 'Количество звонков' },
+                    { value: 'd', label: 'Стоимость лида' }
+                ]},
+                { id: 'q16', text: '16. Что такое CAC?', options: [
+                    { value: 'a', label: 'Стоимость привлечения клиента' },
+                    { value: 'b', label: 'Средний чек' },
+                    { value: 'c', label: 'Количество клиентов' },
+                    { value: 'd', label: 'Прибыль' }
+                ]},
+                { id: 'q17', text: '17. Что такое churn rate?', options: [
+                    { value: 'a', label: 'Отток клиентов' },
+                    { value: 'b', label: 'Рост продаж' },
+                    { value: 'c', label: 'Возврат товара' },
+                    { value: 'd', label: 'Скидка' }
+                ]},
+                { id: 'q18', text: '18. Что такое lead magnet?', options: [
+                    { value: 'a', label: 'Магнит для привлечения лидов' },
+                    { value: 'b', label: 'Подарок клиенту' },
+                    { value: 'c', label: 'Бонус за покупку' },
+                    { value: 'd', label: 'Реклама' }
+                ]},
+                { id: 'q19', text: '19. Что такое retargeting?', options: [
+                    { value: 'a', label: 'Повторный таргетинг' },
+                    { value: 'b', label: 'Новая реклама' },
+                    { value: 'c', label: 'Анализ конкурентов' },
+                    { value: 'd', label: 'Создание сайта' }
+                ]},
+                { id: 'q20', text: '20. Что такое A/B тест?', options: [
+                    { value: 'a', label: 'Сравнение двух вариантов' },
+                    { value: 'b', label: 'Тестирование программы' },
+                    { value: 'c', label: 'Проверка качества' },
+                    { value: 'd', label: 'Опрос клиентов' }
+                ]}
+            ]
+        };
+
+        const testNames = {
+            '1': 'Тест 1: Отдел и Должность',
+            '2': 'Тест 2: Общие вопросы',
+            '3': 'Тест 3: 20 вопросов'
+        };
+
+        async function loadUsers() {
+            const container = document.getElementById('users-list');
+            const countEl = document.getElementById('users-count');
+            
+            container.innerHTML = '<div class="loading">Загрузка...</div>';
+
+            try {
+                // Check if user is admin - temporarily disabled for testing
+                // const userId = sessionStorage.getItem('user_id');
+                // const adminIds = ['5093303797', '7579436'];
+                // 
+                // if (!userId || !adminIds.includes(userId)) {
+                //     document.getElementById('users-container').innerHTML = '<div class="error">Доступ запрещен</div>';
+                //     return;
+                // }
+
+                const response = await fetch('/api/admin/users');
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    container.innerHTML = '<div class="error">' + (errorData.error || 'Ошибка доступа') + '</div>';
+                    return;
+                }
+                
+                const users = await response.json();
+
+                if (users.length === 0) {
+                    container.innerHTML = '<div class="no-results">Нет пользователей</div>';
+                    countEl.textContent = '0';
+                    return;
+                }
+
+                countEl.textContent = users.length;
+                
+                container.innerHTML = users.map(user => `
+                    <div class="user-card">
+                        <div class="user-header" onclick="toggleDetails('${user.id}')">
+                            <div class="user-info">
+                                <div class="user-avatar">${user.firstName ? user.firstName[0].toUpperCase() : 'U'}</div>
+                                <div>
+                                    <div class="user-name">${user.firstName || 'Пользователь'}</div>
+                                    <div class="user-username">@${user.username || 'unknown'}</div>
+                                </div>
+                            </div>
+                            <div class="user-stats">
+                                <span class="stat-badge tests">${user.results.length} тестов</span>
+                                <span class="stat-badge progress">${getAverageProgress(user.results)}%</span>
+                                <span class="expand-icon" id="icon-${user.id}">▼</span>
+                            </div>
+                        </div>
+                        <div class="user-details" id="details-${user.id}">
+                            <div class="detail-section">
+                                <h4>Информация о пользователе</h4>
+                                <p><strong>Telegram ID:</strong> ${user.telegramId}</p>
+                                <p><strong>Имя:</strong> ${user.firstName || 'не указано'}</p>
+                                <p><strong>Username:</strong> @${user.username || 'не указан'}</p>
+                                <p><strong>Дата регистрации:</strong> ${formatDate(user.createdAt)}</p>
+                            </div>
+                            
+                            <div class="detail-section">
+                                <h4>Результаты тестов</h4>
+                                ${user.results.length === 0 ? '<p>Нет результатов</p>' : ''}
+                                ${user.results.map(r => `
+                                    <div class="test-result">
+                                        <div class="test-result-header">
+                                            <span class="test-name">${testNames[r.testId] || 'Тест ' + r.testId}</span>
+                                            <span class="test-progress">${r.progress}%</span>
+                                        </div>
+                                        <div class="test-answers">
+                                            ${formatAnswers(r.answers, r.testId)}
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+
+            } catch (error) {
+                console.error('Error loading users:', error);
+                console.error('Response status:', response?.status);
+                console.error('Response text:', response?.statusText);
+                container.innerHTML = '<div class="no-results">Ошибка загрузки данных</div>';
+            }
+        }
+
+        function toggleDetails(userId) {
+            const details = document.getElementById('details-' + userId);
+            const icon = document.getElementById('icon-' + userId);
+            
+            if (details.classList.contains('visible')) {
+                details.classList.remove('visible');
+                icon.classList.remove('expanded');
+            } else {
+                details.classList.add('visible');
+                icon.classList.add('expanded');
+            }
+        }
+
+        function getAverageProgress(results) {
+            if (results.length === 0) return 0;
+            const sum = results.reduce((acc, r) => acc + r.progress, 0);
+            return Math.round(sum / results.length);
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return 'неизвестно';
+            const date = new Date(dateStr);
+            return date.toLocaleDateString('ru-RU', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        function formatAnswers(answers, testId) {
+            if (!answers) return 'Нет ответов';
+            
+            const entries = Object.entries(answers);
+            if (entries.length === 0) return 'Нет ответов';
+            
+            const questions = TEST_QUESTIONS[testId] || [];
+            const questionMap = {};
+            questions.forEach(q => { questionMap[q.id] = q; });
+            
+            return entries.map(([questionId, answer]) => {
+                const question = questionMap[questionId];
+                const questionText = question ? question.text : 'Вопрос ' + questionId;
+                
+                let answerText = answer;
+                if (question && question.options) {
+                    const option = question.options.find(o => o.value === answer);
+                    answerText = option ? option.label : (answer || 'нет ответа');
+                }
+                
+                return `<p><strong>"${questionText}"</strong>: ${answerText || 'нет ответа'}</p>`;
+            }).join('');
+        }
+
+        // Load users on page load
+        document.addEventListener('DOMContentLoaded', loadUsers);
+    </script>
+</body>
+</html>

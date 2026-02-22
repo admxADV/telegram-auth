@@ -1,0 +1,16 @@
+# Dependencies
+backend/node_modules/
+
+# Environment
+backend/.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Data (optional - uncomment if you don't want to track data.json)
+# data.json
