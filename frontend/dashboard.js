@@ -54,37 +54,32 @@ const TESTS = [
     {
         id: 2,
         title: 'Общие вопросы',
-        description: 'Базовые вопросы о вашей работе',
+        description: 'Вопросы о вашей работе',
         progress: 0,
         questions: [
             {
-                id: 'experience',
-                text: 'Сколько лет вы работаете в компании?',
-                type: 'select',
-                options: [
-                    { value: 'less1', label: 'Менее 1 года' },
-                    { value: '1_3', label: '1-3 года' },
-                    { value: '3_5', label: '3-5 лет' },
-                    { value: 'more5', label: 'Более 5 лет' }
-                ]
+                id: 'daily_routine',
+                text: 'Опишите ваш обычный рабочий день. Напишите тезисно все какие задачи вы выполняете от самых не значительных до больших',
+                type: 'textarea',
+                placeholder: 'Опишите ваш рабочий день...'
             },
             {
-                id: 'goals',
-                text: 'Какие у вас основные KPI?',
+                id: 'time_consuming',
+                text: 'Перечислите задачи которые занимают большую часть вашего времени',
                 type: 'textarea',
-                placeholder: 'Перечислите ваши KPI'
+                placeholder: 'Перечислите задачи...'
             },
             {
-                id: 'achievements',
-                text: 'Какой ваш главный профессиональный успех?',
+                id: 'magic_helper',
+                text: 'Если бы у вас появился волшебный помощник, какую самую скучную задачу вы бы отдали ему первым делом?',
                 type: 'textarea',
-                placeholder: 'Опишите ваш успех'
+                placeholder: 'Опишите задачу...'
             },
             {
-                id: 'improvements',
-                text: 'Что бы вы изменили в своей работе?',
+                id: 'irritates',
+                text: 'Что вас раздражает в текущих процессах больше всего?',
                 type: 'textarea',
-                placeholder: 'Ваши предложения'
+                placeholder: 'Опишите, что раздражает...'
             }
         ]
     },
