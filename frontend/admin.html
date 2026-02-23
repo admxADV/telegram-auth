@@ -154,12 +154,52 @@
             color: #1565c0;
         }
 
+        .stat-badge.unread {
+            background: #ffebee;
+            color: #c62828;
+            font-weight: bold;
+        }
+
         .expand-icon {
             transition: transform 0.3s;
         }
 
         .expand-icon.expanded {
             transform: rotate(180deg);
+        }
+
+        .user-actions {
+            display: flex;
+            gap: 8px;
+            margin-left: 8px;
+        }
+
+        .action-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .chat-btn {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+
+        .chat-btn:hover {
+            background: #bbdefb;
+        }
+
+        .test-btn {
+            background: #f3e5f5;
+            color: #7b1fa2;
+        }
+
+        .test-btn:hover {
+            background: #e1bee7;
         }
 
         .user-details {
@@ -217,6 +257,81 @@
 
         .test-answers p {
             margin-bottom: 4px;
+        }
+
+        /* Chat section for admin */
+        .chat-section {
+            margin-top: 16px;
+            border-top: 1px solid #e1e4e8;
+            padding-top: 16px;
+        }
+
+        .chat-section h4 {
+            font-size: 14px;
+            color: #1a1a1a;
+            margin: 0 0 12px 0;
+        }
+
+        .admin-chat-messages {
+            max-height: 150px;
+            overflow-y: auto;
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        .admin-chat-msg {
+            font-size: 12px;
+            padding: 6px 10px;
+            border-radius: 8px;
+            margin-bottom: 6px;
+        }
+
+        .admin-chat-msg.sent {
+            background: #e1e4e8;
+            color: #1a1a1a;
+            margin-right: 20px;
+        }
+
+        .admin-chat-msg.received {
+            background: #667eea;
+            color: white;
+            margin-left: 20px;
+        }
+
+        .admin-chat-input {
+            display: flex;
+            gap: 8px;
+        }
+
+        .admin-chat-input input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #e1e4e8;
+            border-radius: 6px;
+            font-size: 12px;
+        }
+
+        .admin-chat-input button {
+            padding: 8px 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .admin-chat-input button:hover {
+            background: #5a6fd6;
+        }
+
+        .chat-no-messages {
+            text-align: center;
+            padding: 10px;
+            color: #999;
+            font-size: 12px;
         }
 
         .no-results {
@@ -293,7 +408,7 @@
                     { value: 'training', label: 'Обучение персонала' },
                     { value: 'marketing', label: 'Маркетинг' },
                     { value: 'legal', label: 'Юридический отдел' },
-                    { value: 'other', label: 'Другое' }
+                    { value: 'other', label: 'Написать свой вариант' }
                 ]},
                 { id: 'position', text: 'Какая у вас должность?' },
                 { id: 'tasks', text: 'Откуда берутся ваши задачи?', options: [
@@ -301,7 +416,7 @@
                     { value: 'meeting', label: 'Планерки / устные указания' },
                     { value: 'self', label: 'Сам планирую' },
                     { value: 'clients', label: 'От клиентов' },
-                    { value: 'other', label: 'Другое' }
+                    { value: 'other', label: 'Написать свой вариант' }
                 ]},
                 { id: 'systems', text: 'Какими системами пользуетесь ежедневно?', options: [
                     { value: 'crm', label: 'CRM система' },
@@ -489,7 +604,7 @@
                 
                 container.innerHTML = users.map(user => `
                     <div class="user-card">
-                        <div class="user-header" onclick="toggleDetails('${user.id}')">
+                        <div class="user-header" onclick="toggleDetails('${user.telegramId}')">
                             <div class="user-info">
                                 <div class="user-avatar">${user.firstName ? user.firstName[0].toUpperCase() : 'U'}</div>
                                 <div>
@@ -498,17 +613,22 @@
                                 </div>
                             </div>
                             <div class="user-stats">
+                                ${user.unreadCount > 0 ? `<span class="stat-badge unread">${user.unreadCount} новых</span>` : ''}
                                 <span class="stat-badge tests">${user.results.length} тестов</span>
                                 <span class="stat-badge progress">${getAverageProgress(user.results)}%</span>
-                                <span class="expand-icon" id="icon-${user.id}">▼</span>
+                                <div class="user-actions">
+                                    <button class="action-btn chat-btn" onclick="openChat('${user.telegramId}'); event.stopPropagation();">💬 Чат</button>
+                                    <button class="action-btn test-btn" onclick="openTestResults('${user.telegramId}'); event.stopPropagation();">📝 Тест</button>
+                                </div>
+                                <span class="expand-icon" id="icon-${user.telegramId}">▼</span>
                             </div>
                         </div>
-                        <div class="user-details" id="details-${user.id}">
+                        <div class="user-details" id="details-${user.telegramId}">
                             <div class="detail-section">
                                 <h4>Информация о пользователе</h4>
                                 <p><strong>Telegram ID:</strong> ${user.telegramId}</p>
-                                <p><strong>Имя:</strong> ${user.firstName || 'не указано'}</p>
-                                <p><strong>Username:</strong> @${user.username || 'не указан'}</p>
+                                <p><strong>Имя:</strong> ${user.firstName || user.username || 'не указано'}</p>
+                                <p><strong>Username:</strong> ${user.username ? '@' + user.username : 'не указан'}</p>
                                 <p><strong>Дата регистрации:</strong> ${formatDate(user.createdAt)}</p>
                             </div>
                             
@@ -527,6 +647,17 @@
                                     </div>
                                 `).join('')}
                             </div>
+                            
+                            <div class="chat-section">
+                                <h4>Чат с пользователем</h4>
+                                <div class="admin-chat-messages" id="chat-messages-${user.telegramId}">
+                                    <div class="chat-no-messages">Загрузка сообщений...</div>
+                                </div>
+                                <div class="admin-chat-input">
+                                    <input type="text" id="chat-input-${user.telegramId}" placeholder="Введите сообщение..." onkeypress="handleChatKeyPress(event, '${user.telegramId}')">
+                                    <button onclick="sendAdminMessage('${user.telegramId}')">Отправить</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 `).join('');
@@ -539,16 +670,88 @@
             }
         }
 
-        function toggleDetails(userId) {
-            const details = document.getElementById('details-' + userId);
-            const icon = document.getElementById('icon-' + userId);
+        function toggleDetails(telegramId) {
+            const details = document.getElementById('details-' + telegramId);
+            const icon = document.getElementById('icon-' + telegramId);
             
             if (details.classList.contains('visible')) {
                 details.classList.remove('visible');
                 icon.classList.remove('expanded');
+                // Stop auto-refresh when collapsing
+                stopChatRefresh();
             } else {
                 details.classList.add('visible');
                 icon.classList.add('expanded');
+                // Load chat messages when expanding
+                loadChatMessagesForUser(telegramId);
+                // Start auto-refresh
+                startChatRefresh(telegramId);
+            }
+        }
+
+        function openChat(telegramId) {
+            // Отправляем напоминание пользователю
+            fetch('/api/admin/send-reminder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ telegramId: telegramId, type: 'chat' })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Напоминание отправлено пользователю!');
+                }
+            })
+            .catch(err => console.error('Ошибка:', err));
+            
+            // Expand if not visible
+            const details = document.getElementById('details-' + telegramId);
+            const icon = document.getElementById('icon-' + telegramId);
+            
+            if (!details.classList.contains('visible')) {
+                details.classList.add('visible');
+                icon.classList.add('expanded');
+                loadChatMessagesForUser(telegramId);
+                startChatRefresh(telegramId);
+            }
+            
+            // Scroll to chat section
+            const chatSection = details.querySelector('.chat-section');
+            if (chatSection) {
+                chatSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+
+        function openTestResults(telegramId) {
+            // Отправляем напоминание пользователю
+            fetch('/api/admin/send-reminder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ telegramId: telegramId, type: 'test' })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Напоминание отправлено пользователю!');
+                }
+            })
+            .catch(err => console.error('Ошибка:', err));
+            
+            // Expand if not visible
+            const details = document.getElementById('details-' + telegramId);
+            const icon = document.getElementById('icon-' + telegramId);
+            
+            if (!details.classList.contains('visible')) {
+                details.classList.add('visible');
+                icon.classList.add('expanded');
+                loadChatMessagesForUser(telegramId);
+                startChatRefresh(telegramId);
+            }
+            
+            // Scroll to test results section
+            const testSection = details.querySelector('.detail-section:nth-of-type(2)');
+            if (testSection) {
+                testSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
         }
 
@@ -592,6 +795,128 @@
                 
                 return `<p><strong>"${questionText}"</strong>: ${answerText || 'нет ответа'}</p>`;
             }).join('');
+        }
+
+        // Chat functions for admin
+        async function loadChatMessagesForUser(telegramId) {
+            const container = document.getElementById('chat-messages-' + telegramId);
+            if (!container) return;
+            
+            try {
+                const response = await fetch(`/api/chat/messages?userId=${telegramId}`);
+                const messages = await response.json();
+                
+                if (!messages || messages.length === 0) {
+                    container.innerHTML = '<div class="chat-no-messages">Нет сообщений</div>';
+                    return;
+                }
+                
+                container.innerHTML = messages.map(msg => `
+                    <div class="admin-chat-msg ${msg.type}">
+                        ${msg.text}
+                    </div>
+                `).join('');
+                
+                container.scrollTop = container.scrollHeight;
+            } catch (error) {
+                console.error('Error loading chat messages:', error);
+                container.innerHTML = '<div class="chat-no-messages">Ошибка загрузки</div>';
+            }
+        }
+
+        async function sendAdminMessage(telegramId) {
+            console.log('sendAdminMessage called with:', telegramId);
+            const input = document.getElementById('chat-input-' + telegramId);
+            console.log('Input element:', input);
+            if (!input) {
+                console.error('Input not found for id: chat-input-' + telegramId);
+                return;
+            }
+            const message = input.value.trim();
+            console.log('Message:', message);
+            
+            if (!message) return;
+            
+            try {
+                const response = await fetch('/api/chat/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userId: telegramId,
+                        text: message,
+                        type: 'received' // Admin sends - user receives
+                    })
+                });
+                console.log('Response:', response);
+                
+                if (response.ok) {
+                    input.value = '';
+                    loadChatMessagesForUser(telegramId);
+                }
+            } catch (error) {
+                console.error('Error sending message:', error);
+            }
+        }
+
+        function handleChatKeyPress(event, telegramId) {
+            if (event.key === 'Enter') {
+                sendAdminMessage(telegramId);
+            }
+        }
+
+        // Make functions global
+        window.sendAdminMessage = async function(telegramId) {
+            const input = document.getElementById('chat-input-' + telegramId);
+            if (!input) return;
+            
+            const message = input.value.trim();
+            if (!message) return;
+            
+            try {
+                const response = await fetch('/api/chat/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userId: telegramId,
+                        text: message,
+                        type: 'received'
+                    })
+                });
+                
+                if (response.ok) {
+                    input.value = '';
+                    loadChatMessagesForUser(telegramId);
+                }
+            } catch (error) {
+                console.error('Error sending message:', error);
+            }
+        };
+        
+        window.handleChatKeyPress = function(event, telegramId) {
+            if (event.key === 'Enter') {
+                window.sendAdminMessage(telegramId);
+            }
+        };
+
+        // Auto-refresh chat messages every 3 seconds
+        let chatRefreshInterval = null;
+        
+        function startChatRefresh(telegramId) {
+            // Clear any existing interval
+            if (chatRefreshInterval) {
+                clearInterval(chatRefreshInterval);
+            }
+            // Refresh chat every 3 seconds
+            chatRefreshInterval = setInterval(() => {
+                loadChatMessagesForUser(telegramId);
+            }, 3000);
+        }
+        
+        function stopChatRefresh() {
+            if (chatRefreshInterval) {
+                clearInterval(chatRefreshInterval);
+                chatRefreshInterval = null;
+            }
         }
 
         // Load users on page load

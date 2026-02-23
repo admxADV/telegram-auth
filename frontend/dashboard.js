@@ -21,7 +21,7 @@ const TESTS = [
                     { value: 'training', label: 'Обучение персонала' },
                     { value: 'marketing', label: 'Маркетинг' },
                     { value: 'legal', label: 'Юридический отдел' },
-                    { value: 'other', label: 'Другое' }
+                    { value: 'other', label: 'Написать свой вариант' }
                 ]
             },
             {
@@ -31,27 +31,16 @@ const TESTS = [
                 placeholder: 'Напишите вашу должность'
             },
             {
-                id: 'tasks',
-                text: 'Откуда берутся ваши задачи?',
-                type: 'select',
-                options: [
-                    { value: 'crm', label: 'Задачи в CRM' },
-                    { value: 'meeting', label: 'Планерки / устные указания' },
-                    { value: 'self', label: 'Сам планирую' },
-                    { value: 'clients', label: 'От клиентов' },
-                    { value: 'other', label: 'Другое' }
-                ]
-            },
-            {
                 id: 'systems',
-                text: 'Какими системами пользуетесь ежедневно?',
+                text: 'Какими системами пользуетесь ежедневно? В том числе и бумажные журналы',
                 type: 'multiselect',
                 options: [
                     { value: 'crm', label: 'CRM система' },
                     { value: 'excel', label: 'Excel / Google Таблицы' },
                     { value: 'messaging', label: 'Telegram / WhatsApp' },
                     { value: 'realty', label: 'Авито / Циан / Домклик' },
-                    { value: '1c', label: '1С / финансы' }
+                    { value: '1c', label: '1С / финансы' },
+                    { value: 'custom', label: 'Написать свои варианты' }
                 ]
             },
             {
@@ -533,7 +522,7 @@ async function getTests() {
  * Show welcome state
  */
 function showWelcomeState() {
-    const mainContent = document.getElementById('main-content');
+    const mainContent = document.getElementById('test-area');
     mainContent.innerHTML = `
         <div class="welcome-state">
             <div class="welcome-icon">
@@ -569,19 +558,23 @@ function selectTest(test) {
  * Render test form
  */
 function renderTestForm(test) {
-    const mainContent = document.getElementById('main-content');
+    const mainContent = document.getElementById('test-area');
     
     let questionsHTML = '';
     
     test.questions.forEach((question, index) => {
         let inputHTML = '';
+        let customInputHTML = '';
         
         if (question.type === 'select') {
             inputHTML = `
-                <select class="select-input" data-question="${question.id}">
+                <select class="select-input" data-question="${question.id}" onchange="handleSelectChange(this, '${question.id}')">
                     <option value="">Выберите...</option>
                     ${question.options.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('')}
                 </select>
+                <div id="custom-${question.id}" class="custom-input-wrapper" style="display: none; margin-top: 10px;">
+                    <input type="text" class="text-input" data-question="${question.id}_custom" placeholder="Напишите ваш вариант">
+                </div>
             `;
         } else if (question.type === 'radio') {
             inputHTML = `
@@ -599,10 +592,13 @@ function renderTestForm(test) {
                 <div class="options">
                     ${question.options.map(opt => `
                         <label class="option">
-                            <input type="checkbox" name="${question.id}" value="${opt.value}">
+                            <input type="checkbox" name="${question.id}" value="${opt.value}" onchange="handleMultiselectChange(this, '${question.id}')">
                             <span class="option-text">${opt.label}</span>
                         </label>
                     `).join('')}
+                </div>
+                <div id="custom-${question.id}" class="custom-input-wrapper" style="display: none; margin-top: 10px;">
+                    <input type="text" class="text-input" data-question="${question.id}_custom" placeholder="Напишите ваши варианты">
                 </div>
             `;
         } else if (question.type === 'text') {
@@ -641,9 +637,21 @@ function renderTestForm(test) {
     // Add event listeners for options
     document.querySelectorAll('.option').forEach(option => {
         option.addEventListener('click', function(e) {
-            if (e.target.tagName === 'INPUT') return;
-            
             const input = this.querySelector('input');
+            if (!input) return;
+            
+            // Если кликнули на сам checkbox/radio, браузер сам обработает
+            if (e.target === input) {
+                // Для radio: снять selected со всех в группе
+                if (input.type === 'radio') {
+                    this.parentElement.querySelectorAll('.option').forEach(opt => opt.classList.remove('selected'));
+                }
+                // Добавить/убрать класс selected
+                this.classList.toggle('selected', input.checked);
+                return;
+            }
+            
+            // Если кликнули на текст или область label - переключаем вручную
             if (input.type === 'radio') {
                 // Deselect all in this group
                 this.parentElement.querySelectorAll('.option').forEach(opt => opt.classList.remove('selected'));
@@ -776,4 +784,139 @@ function resetTest() {
 }
 
 // Initialize on page load
-document.addEventListener('DOMContentLoaded', initDashboard);
+document.addEventListener('DOMContentLoaded', () => {
+    initDashboard();
+    loadChatMessages();
+    // Auto-refresh chat every 3 seconds
+    setInterval(loadChatMessages, 3000);
+});
+
+// ==================== CHAT FUNCTIONS ====================
+
+let chatMessages = [];
+
+// Load chat messages from server
+async function loadChatMessages() {
+    const userId = sessionStorage.getItem('user_id');
+    if (!userId) return;
+    
+    try {
+        const response = await fetch('/api/chat/messages?userId=' + userId);
+        if (response.ok) {
+            chatMessages = await response.json();
+            renderChatMessages();
+        }
+    } catch (error) {
+        console.error('Error loading chat messages:', error);
+    }
+}
+
+// Render chat messages
+function renderChatMessages() {
+    const container = document.getElementById('chat-messages');
+    if (!container) return;
+    
+    if (chatMessages.length === 0) {
+        container.innerHTML = '<div class="chat-empty">Пока нет сообщений</div>';
+        return;
+    }
+    
+    container.innerHTML = chatMessages.map(msg => `
+        <div class="message ${msg.type}">
+            ${msg.text}
+            <div class="message-time">${formatMessageTime(msg.timestamp)}</div>
+        </div>
+    `).join('');
+    
+    // Scroll to bottom
+    container.scrollTop = container.scrollHeight;
+}
+
+// Format message time
+function formatMessageTime(timestamp) {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+}
+
+// Send message
+async function sendMessage() {
+    const input = document.getElementById('chat-input');
+    const text = input.value.trim();
+    const userId = sessionStorage.getItem('user_id');
+    
+    if (!text || !userId) return;
+    
+    // Add message to local array
+    const message = {
+        id: Date.now(),
+        text: text,
+        type: 'sent',
+        timestamp: new Date().toISOString(),
+        userId: userId
+    };
+    
+    chatMessages.push(message);
+    renderChatMessages();
+    
+    // Clear input
+    input.value = '';
+    
+    // Send to server
+    try {
+        await fetch('/api/chat/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userId: userId,
+                text: text
+            })
+        });
+    } catch (error) {
+        console.error('Error sending message:', error);
+    }
+}
+
+// Handle Enter key in chat input
+function handleChatKeyPress(event) {
+    if (event.key === 'Enter') {
+        sendMessage();
+    }
+}
+
+// Handle select change - show custom input for 'other' option
+function handleSelectChange(selectElement, questionId) {
+    const customWrapper = document.getElementById('custom-' + questionId);
+    if (!customWrapper) return;
+    
+    if (selectElement.value === 'other') {
+        customWrapper.style.display = 'block';
+        customWrapper.querySelector('input').focus();
+    } else {
+        customWrapper.style.display = 'none';
+        customWrapper.querySelector('input').value = '';
+    }
+}
+
+// Handle multiselect change - show custom input for 'custom' option
+function handleMultiselectChange(checkboxElement, questionId) {
+    const customWrapper = document.getElementById('custom-' + questionId);
+    if (!customWrapper) return;
+    
+    // Check if 'custom' option is selected
+    const checkboxes = document.querySelectorAll(`input[name="${questionId}"]`);
+    let isCustomSelected = false;
+    
+    checkboxes.forEach(cb => {
+        if (cb.value === 'custom' && cb.checked) {
+            isCustomSelected = true;
+        }
+    });
+    
+    if (isCustomSelected) {
+        customWrapper.style.display = 'block';
+        customWrapper.querySelector('input').focus();
+    } else {
+        customWrapper.style.display = 'none';
+        customWrapper.querySelector('input').value = '';
+    }
+}

@@ -41,10 +41,12 @@ function loadData() {
             db.users = new Map(Object.entries(data.users || {}));
             db.sessions = new Map(Object.entries(data.sessions || {}));
             db.testResults = new Map(Object.entries(data.testResults || {}));
+            db.chatMessages = new Map(Object.entries(data.chatMessages || {}));
             logger.info('SERVER', 'Данные загружены из файла', {
                 usersCount: db.users.size,
                 sessionsCount: db.sessions.size,
-                testResultsCount: db.testResults.size
+                testResultsCount: db.testResults.size,
+                chatMessagesCount: db.chatMessages.size
             });
         } else {
             logger.info('SERVER', 'Файл данных не найден, используем пустую базу');
@@ -60,7 +62,8 @@ function saveData() {
         const data = {
             users: Object.fromEntries(db.users),
             sessions: Object.fromEntries(db.sessions),
-            testResults: Object.fromEntries(db.testResults)
+            testResults: Object.fromEntries(db.testResults),
+            chatMessages: Object.fromEntries(db.chatMessages)
         };
         fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
     } catch (error) {
@@ -71,7 +74,8 @@ function saveData() {
 const db = {
     users: new Map(),
     sessions: new Map(),
-    testResults: new Map()
+    testResults: new Map(),
+    chatMessages: new Map()
 };
 
 // ============================================
@@ -647,6 +651,143 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // Chat - получение сообщений пользователя
+    if (req.method === 'GET' && req.url.startsWith('/api/chat/messages')) {
+        const url = new URL(req.url, `http://localhost:${PORT}`);
+        const userId = url.searchParams.get('userId');
+        
+        if (!userId) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'userId required' }));
+            return;
+        }
+        
+        // Получаем все сообщения для пользователя
+        const messages = [];
+        db.chatMessages.forEach((msg, key) => {
+            if (msg.userId === userId) {
+                messages.push(msg);
+            }
+        });
+        
+        // Сортируем по времени
+        messages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        
+        // Mark received messages as read
+        let hasUnread = false;
+        const updatedMessages = messages.map(msg => {
+            if (msg.type === 'sent' && !msg.read) {
+                hasUnread = true;
+                return { ...msg, read: true };
+            }
+            return msg;
+        });
+        
+        // Update in database if there were unread messages
+        if (hasUnread) {
+            const key = `chat_${userId}`;
+            if (db.chatMessages.has(key)) {
+                db.chatMessages.set(key, updatedMessages);
+                saveData();
+            }
+        }
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(messages));
+        return;
+    }
+
+    // Chat - отправка сообщения
+    if (req.method === 'POST' && req.url === '/api/chat/send') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', () => {
+            try {
+                const data = JSON.parse(body);
+                const { userId, text, type } = data;
+                
+                if (!userId || !text) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'userId and text required' }));
+                    return;
+                }
+                
+                // Создаем сообщение
+                const message = {
+                    id: Date.now(),
+                    userId,
+                    text,
+                    type: type || 'sent',
+                    timestamp: new Date().toISOString()
+                };
+                
+                // Сохраняем сообщение
+                db.chatMessages.set(message.id.toString(), message);
+                saveData();
+                
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true }));
+            } catch (error) {
+                logger.error('API', 'Ошибка отправки сообщения', {
+                    request_id,
+                    error: error.message
+                });
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: 'Ошибка сервера' }));
+            }
+        });
+        return;
+    }
+
+    // Отправка напоминания пользователю (кнопки Чат и Тест в админке)
+    if (req.method === 'POST' && req.url === '/api/admin/send-reminder') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', async () => {
+            try {
+                const data = JSON.parse(body);
+                const { telegramId, type } = data;
+                
+                if (!telegramId || !type) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'telegramId and type required' }));
+                    return;
+                }
+                
+                // Определяем текст сообщения в зависимости от типа
+                let messageText = '';
+                if (type === 'chat') {
+                    messageText = 'Вам пришло сообщение на сайт, мы очень ждем вашего ответа';
+                } else if (type === 'test') {
+                    messageText = 'Администратор напоминает вам про прохождение теста, заполните его как можно быстрее';
+                }
+                
+                // Отправляем сообщение в Telegram
+                await telegramRequest('sendMessage', {
+                    chat_id: telegramId,
+                    text: messageText
+                });
+                
+                logger.info('API', 'Напоминание отправлено', {
+                    request_id,
+                    telegramId,
+                    type
+                });
+                
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true }));
+            } catch (error) {
+                logger.error('API', 'Ошибка отправки напоминания', {
+                    request_id,
+                    error: error.message
+                });
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: 'Ошибка сервера' }));
+            }
+        });
+        return;
+    }
+
     // Получение всех пользователей и их результатов (для админа)
     if (req.method === 'GET' && req.url === '/api/admin/users') {
         // Проверка авторизации через заголовок или cookie - временно отключено для тестирования
@@ -701,6 +842,35 @@ const server = http.createServer(async (req, res) => {
                     });
                 }
             });
+            
+            // Count unanswered messages for this user
+            // New messages = messages from user (sent) that came AFTER the last admin reply (received)
+            let lastReceivedTimestamp = 0;
+            const userMessages = [];
+            
+            db.chatMessages.forEach((msg, key) => {
+                if (String(msg.userId) === String(user.telegramId)) {
+                    if (msg.type === 'sent') {
+                        userMessages.push(msg);
+                    } else if (msg.type === 'received') {
+                        // Track the latest admin reply timestamp
+                        const msgTime = new Date(msg.timestamp).getTime();
+                        if (msgTime > lastReceivedTimestamp) {
+                            lastReceivedTimestamp = msgTime;
+                        }
+                    }
+                }
+            });
+            
+            // Count messages sent after the last admin reply
+            let unreadCount = 0;
+            userMessages.forEach(msg => {
+                const msgTime = new Date(msg.timestamp).getTime();
+                if (msgTime > lastReceivedTimestamp) {
+                    unreadCount++;
+                }
+            });
+            
             users.push({
                 id: user.id,
                 telegramId: user.telegramId,
@@ -708,7 +878,8 @@ const server = http.createServer(async (req, res) => {
                 firstName: user.firstName,
                 lastName: user.lastName,
                 createdAt: user.createdAt,
-                results: userResults
+                results: userResults,
+                unreadCount: unreadCount
             });
         });
 
