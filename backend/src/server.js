@@ -66,6 +66,9 @@ function saveData() {
             chatMessages: Object.fromEntries(db.chatMessages)
         };
         fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+        
+        // Send backup to admin after saving
+        sendDatabaseToAdmin();
     } catch (error) {
         logger.error('SERVER', 'Ошибка сохранения данных', { error: error.message });
     }
@@ -77,6 +80,84 @@ const db = {
     testResults: new Map(),
     chatMessages: new Map()
 };
+
+// Database version counter
+let databaseVersion = 1;
+
+// ============================================
+// DATABASE BACKUP AND TELEGRAM NOTIFY
+// ============================================
+
+async function sendDatabaseToAdmin() {
+    try {
+        const data = {
+            users: Object.fromEntries(db.users),
+            sessions: Object.fromEntries(db.sessions),
+            testResults: Object.fromEntries(db.testResults),
+            chatMessages: Object.fromEntries(db.chatMessages)
+        };
+        
+        const jsonData = JSON.stringify(data, null, 2);
+        const filePath = path.join(__dirname, `../../backup_v${databaseVersion}.json`);
+        fs.writeFileSync(filePath, jsonData);
+        
+        // Send file to Telegram admin using multipart/form-data
+        const boundary = '----WebKitFormBoundary' + crypto.randomBytes(16).toString('hex');
+        const fileContent = fs.readFileSync(filePath);
+        
+        const body = Buffer.concat([
+            Buffer.from(`------WebKitFormBoundary${boundary.replace('------WebKitFormBoundary', '')}\r\n`),
+            Buffer.from(`Content-Disposition: form-data; name="chat_id"\r\n\r\n`),
+            Buffer.from(`${ADMIN_USER_ID}\r\n`),
+            Buffer.from(`------WebKitFormBoundary${boundary.replace('------WebKitFormBoundary', '')}\r\n`),
+            Buffer.from(`Content-Disposition: form-data; name="document"; filename="database_v${databaseVersion}.json"\r\n`),
+            Buffer.from(`Content-Type: application/json\r\n\r\n`),
+            fileContent,
+            Buffer.from(`\r\n------WebKitFormBoundary${boundary.replace('------WebKitFormBoundary', '')}\r\n`),
+            Buffer.from(`Content-Disposition: form-data; name="caption"\r\n\r\n`),
+            Buffer.from(`🗄️ Версия базы №${databaseVersion}\n\nПользователей: ${db.users.size}\nСессий: ${db.sessions.size}\nТестов: ${db.testResults.size}\nСообщений: ${db.chatMessages.size}\r\n`),
+            Buffer.from(`------WebKitFormBoundary${boundary.replace('------WebKitFormBoundary', '')}--\r\n`)
+        ]);
+        
+        const response = await new Promise((resolve, reject) => {
+            const req = https.request(`${TELEGRAM_API_URL}/sendDocument`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': `multipart/form-data; boundary=----WebKitFormBoundary${boundary.replace('------WebKitFormBoundary', '')}`,
+                    'Content-Length': body.length
+                }
+            }, (res) => {
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => resolve(JSON.parse(data)));
+            });
+            
+            req.on('error', reject);
+            req.write(body);
+            req.end();
+        });
+        
+        logger.info('BACKUP', 'База отправлена администратору', { 
+            version: databaseVersion, 
+            success: response.ok 
+        });
+        
+        // Clean up old backup files (keep last 5)
+        const backupDir = path.join(__dirname, '../../');
+        const backupFiles = fs.readdirSync(backupDir)
+            .filter(f => f.startsWith('backup_v') && f.endsWith('.json'))
+            .sort()
+            .reverse();
+        
+        backupFiles.slice(5).forEach(file => {
+            fs.unlinkSync(path.join(backupDir, file));
+        });
+        
+        databaseVersion++;
+    } catch (error) {
+        logger.error('BACKUP', 'Ошибка отправки базы', { error: error.message });
+    }
+}
 
 // ============================================
 // STRUCTURED LOGGING SYSTEM
