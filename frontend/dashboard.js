@@ -12,23 +12,36 @@ const TESTS = [
         progress: 0,
         questions: [
             {
-                id: 'dept',
-                text: 'Выберите отдел',
+                id: 'position_select',
+                text: 'Выберите вашу должность',
                 type: 'select',
                 options: [
-                    { value: 'sales', label: 'Отдел продаж' },
-                    { value: 'recruitment', label: 'Подбор персонала' },
-                    { value: 'training', label: 'Обучение персонала' },
-                    { value: 'marketing', label: 'Маркетинг' },
-                    { value: 'legal', label: 'Юридический отдел' },
+                    { value: 'ceo', label: 'Генеральный директор' },
+                    { value: 'commercial_director', label: 'Коммерческий директор' },
+                    { value: 'hr_bp', label: 'HR бизнес партнер' },
+                    { value: 'support_sales_director', label: 'Директор департамента поддержки продаж' },
+                    { value: 'recruitment_head', label: 'Руководитель группы найма' },
+                    { value: 'sales_head', label: 'Руководитель группы продаж' },
+                    { value: 'support_manager', label: 'Менеджер поддержки продаж' },
+                    { value: 'newbuildings_manager', label: 'Управляющий по новостройкам' },
+                    { value: 'mortgage_specialist', label: 'Ипотечный специалист' },
+                    { value: 'lawyer', label: 'Юрист' },
+                    { value: 'advertising_manager', label: 'Рекламный менеджер' },
+                    { value: 'administrator', label: 'Администратор' },
+                    { value: 'hr_manager', label: 'HR менеджер' },
+                    { value: 'accountant', label: 'Бухгалтер' },
+                    { value: 'clerk', label: 'Делопроизводитель' },
+                    { value: 'business_trainer', label: 'Бизнес-тренер' },
+                    { value: 'analyst', label: 'Аналитик' },
+                    { value: 'photographer', label: 'Фотограф' },
                     { value: 'other', label: 'Написать свой вариант' }
                 ]
             },
             {
                 id: 'position',
-                text: 'Какая у вас должность?',
+                text: 'Напишите название вашей должности',
                 type: 'text',
-                placeholder: 'Напишите вашу должность'
+                placeholder: 'Ваша должность'
             },
             {
                 id: 'systems',
