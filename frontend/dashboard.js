@@ -221,7 +221,7 @@ const TESTS = [
     },
     {
         id: 3,
-        title: 'Тест знаний',
+        title: 'Тест',
         description: '20 вопросов с выбором ответа',
         progress: 0,
         questions: [
@@ -589,7 +589,8 @@ async function loadTests() {
         testItem.className = 'test-item';
         
         // Проверяем, доступен ли тест (последовательная разблокировка)
-        const isLocked = index > 0 && tests[index - 1].progress < 100;
+        // Тест 3 (index 2) всегда заблокирован
+        const isLocked = index === 2 || (index > 0 && tests[index - 1].progress < 100);
         
         if (isLocked) {
             testItem.classList.add('locked');
