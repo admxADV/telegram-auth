@@ -14,11 +14,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Trigger Render Deploy via API
+      - name: Trigger Render Deploy
         run: |
-          curl -X POST "https://api.render.com/deploy/srv-${{ secrets.RENDER_SERVICE_ID }}" \
-            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-            -H "Content-Type: application/json" || echo "API deploy failed, Render auto-deploy should handle it"
+          curl -X POST "https://api.render.com/deploy/srv-d6dovu24d50c73b0dibg?key=vlESCMHJvSk"
 
       - name: Wait for Render auto-deploy
         run: sleep 5
