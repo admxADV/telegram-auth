@@ -12,25 +12,7 @@ const TESTS = [
         progress: 0,
         questions: [
             {
-                id: 'dept',
-                text: 'Выберите отдел',
-                type: 'select',
-                options: [
-                    { value: 'sales', label: 'Отдел продаж' },
-                    { value: 'recruitment', label: 'Подбор персонала' },
-                    { value: 'training', label: 'Обучение персонала' },
-                    { value: 'marketing', label: 'Маркетинг' },
-                    { value: 'legal', label: 'Юридический отдел' },
-                    { value: 'other', label: 'Написать свой вариант' }
-                ]
-            },
-            {
-                id: 'position',
-                text: 'Какая у вас должность?',
-                type: 'text',
-                placeholder: 'Напишите вашу должность'
-            },
-            {
+                id: 'position_select',
                 id: 'systems',
                 text: 'Какими системами пользуетесь ежедневно? В том числе и бумажные журналы',
                 type: 'multiselect',
