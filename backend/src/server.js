@@ -68,11 +68,14 @@ function saveData() {
             chatMessages: Object.fromEntries(db.chatMessages)
         };
         fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-        logger.info('SERVER', 'Данные сохранены в файл');
+        logger.info('SERVER', 'Данные сохранены в файл', { users: data.users ? Object.keys(data.users).length : 0 });
 
-        // Send backup to admin after saving
-        logger.info('SERVER', 'Вызов sendDatabaseToAdmin');
-        sendDatabaseToAdmin();
+        // Send backup to admin after saving (async, не ждём завершения)
+        logger.info('SERVER', 'Вызов sendDatabaseToAdmin', { version: databaseVersion });
+        sendDatabaseToAdmin().catch(err => {
+            logger.error('SERVER', 'Ошибка в sendDatabaseToAdmin', { error: err.message });
+        });
+        logger.info('SERVER', 'saveData завершена');
     } catch (error) {
         logger.error('SERVER', 'Ошибка сохранения данных', { error: error.message });
     }
