@@ -195,9 +195,10 @@ const TESTS = [
         questions: [
             {
                 id: 'daily_routine',
-                text: 'Опишите ваш обычный рабочий день. Напишите тезисно все какие задачи вы выполняете от самых не значительных до больших',
+                text: 'Распишите типичный рабочий день',
+                description: 'Опишите максимально подробно ваш рабочий процесс: откуда к вам поступают задачи/данные (от кого или из какой системы), что вы с ними делаете вручную, куда вносите результат и кому передаете дальше. Какие отчеты, справки или таблицы вы обязаны заполнять? С представителями каких отделов вы контактируете ежедневно/еженедельно и по какому поводу?',
                 type: 'textarea',
-                placeholder: 'Опишите ваш рабочий день...'
+                placeholder: 'Опишите ваш рабочий процесс...'
             },
             {
                 id: 'time_consuming',
@@ -767,6 +768,7 @@ function renderTestForm(test) {
             <div class="question">
                 <div class="question-number">Вопрос ${index + 1}</div>
                 <div class="question-text">${question.text}</div>
+                ${question.description ? `<div class="question-description">${question.description}</div>` : ''}
                 ${inputHTML}
             </div>
         `;
