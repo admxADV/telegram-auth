@@ -130,9 +130,17 @@ async function sendDatabaseToAdmin() {
                 let data = '';
                 res.on('data', chunk => data += chunk);
                 res.on('end', () => {
-                    const result = JSON.parse(data);
-                    logger.info('BACKUP', 'Текстовое сообщение', { ok: result.ok, message_id: result.result?.message_id });
-                    resolve(result);
+                    try {
+                        const result = JSON.parse(data);
+                        logger.info('BACKUP', 'Текстовое сообщение', { ok: result.ok, message_id: result.result?.message_id });
+                        resolve(result);
+                    } catch (e) {
+                        logger.error('BACKUP', 'Не удалось распарсить ответ Telegram', { 
+                            response: data.substring(0, 200),
+                            status: res.statusCode 
+                        });
+                        resolve({ ok: false, error: 'Invalid JSON', raw: data.substring(0, 200) });
+                    }
                 });
             });
             req.on('error', reject);
@@ -162,7 +170,18 @@ async function sendDatabaseToAdmin() {
             }, (res) => {
                 let data = '';
                 res.on('data', chunk => data += chunk);
-                res.on('end', () => resolve(JSON.parse(data)));
+                res.on('end', () => {
+                    try {
+                        const result = JSON.parse(data);
+                        resolve(result);
+                    } catch (e) {
+                        logger.error('BACKUP', 'Не удалось распарсить ответ Telegram', { 
+                            response: data.substring(0, 200),
+                            status: res.statusCode 
+                        });
+                        resolve({ ok: false, error: 'Invalid JSON response', raw: data.substring(0, 200) });
+                    }
+                });
             });
             req.on('error', (err) => {
                 logger.error('BACKUP', 'Ошибка запроса', { error: err.message });
