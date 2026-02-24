@@ -373,6 +373,136 @@
                 justify-content: space-between;
             }
         }
+
+        /* PRO Tab Styles */
+        .admin-tabs {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+            margin-bottom: 24px;
+        }
+
+        .admin-tab {
+            padding: 8px 20px;
+            background: rgba(255,255,255,0.2);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+
+        .admin-tab:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        .admin-tab.active {
+            background: white;
+            color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .pro-container {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        .pro-container h2 {
+            font-size: 20px;
+            color: #1a1a1a;
+            margin-bottom: 24px;
+        }
+
+        .position-card {
+            border: 1px solid #e1e4e8;
+            border-radius: 12px;
+            margin-bottom: 16px;
+            overflow: hidden;
+        }
+
+        .position-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px;
+            background: #f8f9fa;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .position-header:hover {
+            background: #f0f2f5;
+        }
+
+        .position-title {
+            font-weight: 600;
+            color: #1a1a1a;
+        }
+
+        .position-count {
+            background: #667eea;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+        }
+
+        .position-details {
+            display: none;
+            padding: 16px;
+        }
+
+        .position-details.visible {
+            display: block;
+        }
+
+        .answer-group {
+            margin-bottom: 20px;
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .answer-group h4 {
+            font-size: 14px;
+            color: #1a1a1a;
+            margin-bottom: 12px;
+        }
+
+        .answer-item {
+            padding: 8px;
+            background: white;
+            border-left: 3px solid #e1e4e8;
+            margin-bottom: 8px;
+            font-size: 13px;
+            color: #333;
+        }
+
+        .structure-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-left: 8px;
+        }
+
+        .structure-btn:hover {
+            background: #5a6fd6;
+        }
     </style>
 </head>
 <body>
@@ -382,19 +512,34 @@
         <a href="/dashboard.html" class="back-link">
             ← Вернуться к тестам
         </a>
+        <div class="admin-tabs">
+            <button class="admin-tab active" onclick="switchTab('users')">👥 Пользователи</button>
+            <button class="admin-tab" onclick="switchTab('pro')">🚀 PRO</button>
+        </div>
     </div>
 
-    <div class="users-container">
-        <div class="users-header">
-            <h2>Пользователи</h2>
-            <div style="display: flex; align-items: center; gap: 16px;">
-                <span class="users-count" id="users-count">0</span>
-                <button class="refresh-btn" onclick="loadUsers()">Обновить</button>
+    <!-- Tab: Users -->
+    <div id="tab-users" class="tab-content active">
+        <div class="users-container">
+            <div class="users-header">
+                <h2>Пользователи</h2>
+                <div style="display: flex; align-items: center; gap: 16px;">
+                    <span class="users-count" id="users-count">0</span>
+                    <button class="refresh-btn" onclick="loadUsers()">Обновить</button>
+                </div>
+            </div>
+
+            <div id="users-list">
+                <div class="loading">Загрузка...</div>
             </div>
         </div>
+    </div>
 
-        <div id="users-list">
-            <div class="loading">Загрузка...</div>
+    <!-- Tab: PRO -->
+    <div id="tab-pro" class="tab-content">
+        <div class="pro-container">
+            <h2>Аналитика по должностям</h2>
+            <div id="pro-list">Загрузка данных...</div>
         </div>
     </div>
 
@@ -928,6 +1073,154 @@
 
         // Load users on page load
         document.addEventListener('DOMContentLoaded', loadUsers);
+
+        // PRO Tab Functions
+        function switchTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.admin-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById('tab-' + tabName).classList.add('active');
+
+            // Load PRO data if PRO tab is selected
+            if (tabName === 'pro') {
+                loadProData();
+            }
+        }
+
+        async function loadProData() {
+            const proList = document.getElementById('pro-list');
+            proList.innerHTML = '<div class="loading">Загрузка данных...</div>';
+
+            try {
+                const response = await fetch('/api/users');
+                const users = await response.json();
+
+                // Group users by position
+                const positions = {};
+                users.forEach(user => {
+                    const test1 = user.results && user.results[0];
+                    if (test1 && test1.answers) {
+                        const position = test1.answers.position_select || test1.answers.position || 'other';
+                        if (!positions[position]) {
+                            positions[position] = [];
+                        }
+                        positions[position].push(user);
+                    }
+                });
+
+                // Render position cards
+                const positionNames = {
+                    ceo: 'Генеральный директор',
+                    commercial_director: 'Коммерческий директор',
+                    hr_bp: 'HR бизнес партнер',
+                    support_sales_director: 'Директор департамента поддержки продаж',
+                    recruitment_head: 'Руководитель группы найма',
+                    sales_head: 'Руководитель группы продаж',
+                    support_manager: 'Менеджер поддержки продаж',
+                    newbuildings_manager: 'Управляющий по новостройкам',
+                    mortgage_specialist: 'Ипотечный специалист',
+                    lawyer: 'Юрист',
+                    advertising_manager: 'Рекламный менеджер',
+                    administrator: 'Администратор',
+                    hr_manager: 'HR менеджер',
+                    accountant: 'Бухгалтер',
+                    clerk: 'Делопроизводитель',
+                    business_trainer: 'Бизнес-тренер',
+                    analyst: 'Аналитик',
+                    photographer: 'Фотограф',
+                    other: 'Другое'
+                };
+
+                let html = '';
+                for (const [position, users] of Object.entries(positions)) {
+                    const name = positionNames[position] || position;
+                    html += renderPositionCard(position, name, users);
+                }
+
+                proList.innerHTML = html || '<div class="no-results">Нет данных</div>';
+            } catch (error) {
+                console.error('Error loading PRO data:', error);
+                proList.innerHTML = '<div class="no-results">Ошибка загрузки данных</div>';
+            }
+        }
+
+        function renderPositionCard(position, name, users) {
+            // Collect answers for daily_routine (question 3 in test 1)
+            const answers = [];
+            users.forEach(user => {
+                const test1 = user.results && user.results[0];
+                if (test1 && test1.answers && test1.answers.daily_routine) {
+                    answers.push({
+                        username: user.firstName || user.username || 'Аноним',
+                        answer: test1.answers.daily_routine
+                    });
+                }
+            });
+
+            let answersHTML = '';
+            if (answers.length > 0) {
+                answersHTML = '<div class="answer-group"><h4>Ответы на вопрос: Распишите типичный рабочий день</h4>';
+                answers.forEach((item, index) => {
+                    answersHTML += `<div class="answer-item"><strong>${index + 1}. ${item.username}:</strong> ${item.answer}</div>`;
+                });
+                answersHTML += '</div>';
+            } else {
+                answersHTML = '<div class="answer-item">Нет ответов на этот вопрос</div>';
+            }
+
+            return `
+                <div class="position-card">
+                    <div class="position-header" onclick="togglePosition('${position}')">
+                        <span class="position-title">${name}</span>
+                        <span class="position-count">${users.length} чел.</span>
+                    </div>
+                    <div id="position-${position}" class="position-details">
+                        ${answersHTML}
+                        <button class="structure-btn" onclick="structurePosition('${position}')">📊 Структурировать для AI</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function togglePosition(position) {
+            const details = document.getElementById('position-' + position);
+            if (details) {
+                details.classList.toggle('visible');
+            }
+        }
+
+        function structurePosition(position) {
+            const details = document.getElementById('position-' + position);
+            if (!details) return;
+
+            const answers = details.querySelectorAll('.answer-item');
+            let structuredData = 'Должность: ' + position + '\n\n';
+            answers.forEach((item, index) => {
+                structuredData += (index + 1) + '. ' + item.textContent + '\n';
+            });
+
+            // Copy to clipboard
+            navigator.clipboard.writeText(structuredData).then(() => {
+                alert('Данные скопированы в буфер обмена для отправки в AI');
+            }).catch(err => {
+                console.error('Error copying to clipboard:', err);
+                prompt('Скопируйте данные для AI:', structuredData);
+            });
+        }
+
+        // Make functions global
+        window.switchTab = switchTab;
+        window.loadProData = loadProData;
+        window.renderPositionCard = renderPositionCard;
+        window.togglePosition = togglePosition;
+        window.structurePosition = structurePosition;
     </script>
 </body>
 </html>
