@@ -115,9 +115,11 @@ async function sendDatabaseToAdmin() {
         const caption = `🗄️ Версия базы №${databaseVersion}\n\nПользователей: ${db.users.size}\nСессий: ${db.sessions.size}\nТестов: ${db.testResults.size}\nСообщений: ${db.chatMessages.size}`;
         
         const msgBody = JSON.stringify({
-            chat_id: ADMIN_USER_ID,
+            chat_id: String(ADMIN_USER_ID),
             text: caption
         });
+        
+        logger.info('BACKUP', 'Отправка сообщения', { chat_id: ADMIN_USER_ID, caption_length: caption.length });
         
         await new Promise((resolve, reject) => {
             const req = https.request(`${TELEGRAM_API_URL}/sendMessage`, {
@@ -130,6 +132,10 @@ async function sendDatabaseToAdmin() {
                 let data = '';
                 res.on('data', chunk => data += chunk);
                 res.on('end', () => {
+                    logger.info('BACKUP', 'Ответ Telegram', { 
+                        status: res.statusCode, 
+                        response: data.substring(0, 500) 
+                    });
                     try {
                         const result = JSON.parse(data);
                         logger.info('BACKUP', 'Текстовое сообщение', { ok: result.ok, message_id: result.result?.message_id });
