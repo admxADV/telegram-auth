@@ -59,6 +59,8 @@ function loadData() {
 // Save data to file
 function saveData() {
     try {
+        logger.info('SERVER', 'Сохранение данных и отправка бэкапа');
+        
         const data = {
             users: Object.fromEntries(db.users),
             sessions: Object.fromEntries(db.sessions),
@@ -66,8 +68,10 @@ function saveData() {
             chatMessages: Object.fromEntries(db.chatMessages)
         };
         fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-        
+        logger.info('SERVER', 'Данные сохранены в файл');
+
         // Send backup to admin after saving
+        logger.info('SERVER', 'Вызов sendDatabaseToAdmin');
         sendDatabaseToAdmin();
     } catch (error) {
         logger.error('SERVER', 'Ошибка сохранения данных', { error: error.message });
