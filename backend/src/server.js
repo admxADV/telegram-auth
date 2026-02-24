@@ -90,57 +90,82 @@ let databaseVersion = 1;
 
 async function sendDatabaseToAdmin() {
     try {
+        logger.info('BACKUP', 'Начало отправки базы', { version: databaseVersion });
+        
         const data = {
             users: Object.fromEntries(db.users),
             sessions: Object.fromEntries(db.sessions),
             testResults: Object.fromEntries(db.testResults),
             chatMessages: Object.fromEntries(db.chatMessages)
         };
-        
+
         const jsonData = JSON.stringify(data, null, 2);
         const filePath = path.join(__dirname, `../../backup_v${databaseVersion}.json`);
         fs.writeFileSync(filePath, jsonData);
+        logger.info('BACKUP', 'Файл сохранён', { path: filePath, size: jsonData.length });
+
+        // Send text message first
+        const caption = `🗄️ Версия базы №${databaseVersion}\n\nПользователей: ${db.users.size}\nСессий: ${db.sessions.size}\nТестов: ${db.testResults.size}\nСообщений: ${db.chatMessages.size}`;
         
-        // Send file to Telegram admin using multipart/form-data
-        const boundary = '----WebKitFormBoundary' + crypto.randomBytes(16).toString('hex');
-        const fileContent = fs.readFileSync(filePath);
+        const msgBody = JSON.stringify({
+            chat_id: ADMIN_USER_ID,
+            text: caption
+        });
         
-        const body = Buffer.concat([
-            Buffer.from(`------WebKitFormBoundary${boundary.replace('------WebKitFormBoundary', '')}\r\n`),
+        await new Promise((resolve, reject) => {
+            const req = https.request(`${TELEGRAM_API_URL}/sendMessage`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Content-Length': msgBody.length
+                }
+            }, (res) => {
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => {
+                    const result = JSON.parse(data);
+                    logger.info('BACKUP', 'Текстовое сообщение', { ok: result.ok, message_id: result.result?.message_id });
+                    resolve(result);
+                });
+            });
+            req.on('error', reject);
+            req.write(msgBody);
+            req.end();
+        });
+        
+        // Send file
+        const fileBody = Buffer.concat([
+            Buffer.from(`------WebKitFormBoundary7MA4YWxkTrZu0gW\r\n`),
             Buffer.from(`Content-Disposition: form-data; name="chat_id"\r\n\r\n`),
             Buffer.from(`${ADMIN_USER_ID}\r\n`),
-            Buffer.from(`------WebKitFormBoundary${boundary.replace('------WebKitFormBoundary', '')}\r\n`),
+            Buffer.from(`------WebKitFormBoundary7MA4YWxkTrZu0gW\r\n`),
             Buffer.from(`Content-Disposition: form-data; name="document"; filename="database_v${databaseVersion}.json"\r\n`),
             Buffer.from(`Content-Type: application/json\r\n\r\n`),
-            fileContent,
-            Buffer.from(`\r\n------WebKitFormBoundary${boundary.replace('------WebKitFormBoundary', '')}\r\n`),
-            Buffer.from(`Content-Disposition: form-data; name="caption"\r\n\r\n`),
-            Buffer.from(`🗄️ Версия базы №${databaseVersion}\n\nПользователей: ${db.users.size}\nСессий: ${db.sessions.size}\nТестов: ${db.testResults.size}\nСообщений: ${db.chatMessages.size}\r\n`),
-            Buffer.from(`------WebKitFormBoundary${boundary.replace('------WebKitFormBoundary', '')}--\r\n`)
+            fs.readFileSync(filePath),
+            Buffer.from(`\r\n------WebKitFormBoundary7MA4YWxkTrZu0gW--\r\n`)
         ]);
         
-        const response = await new Promise((resolve, reject) => {
+        const fileResult = await new Promise((resolve, reject) => {
             const req = https.request(`${TELEGRAM_API_URL}/sendDocument`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': `multipart/form-data; boundary=----WebKitFormBoundary${boundary.replace('------WebKitFormBoundary', '')}`,
-                    'Content-Length': body.length
+                    'Content-Type': 'multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW',
+                    'Content-Length': fileBody.length
                 }
             }, (res) => {
                 let data = '';
                 res.on('data', chunk => data += chunk);
                 res.on('end', () => resolve(JSON.parse(data)));
             });
-            
-            req.on('error', reject);
-            req.write(body);
+            req.on('error', (err) => {
+                logger.error('BACKUP', 'Ошибка запроса', { error: err.message });
+                reject(err);
+            });
+            req.write(fileBody);
             req.end();
         });
         
-        logger.info('BACKUP', 'База отправлена администратору', { 
-            version: databaseVersion, 
-            success: response.ok 
-        });
+        logger.info('BACKUP', 'Файл отправлен', { ok: fileResult.ok, file_id: fileResult.result?.document?.file_id });
         
         // Clean up old backup files (keep last 5)
         const backupDir = path.join(__dirname, '../../');
@@ -155,7 +180,7 @@ async function sendDatabaseToAdmin() {
         
         databaseVersion++;
     } catch (error) {
-        logger.error('BACKUP', 'Ошибка отправки базы', { error: error.message });
+        logger.error('BACKUP', 'Критическая ошибка отправки', { error: error.message, stack: error.stack });
     }
 }
 
