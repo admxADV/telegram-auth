@@ -1099,7 +1099,7 @@
             proList.innerHTML = '<div class="loading">Загрузка данных...</div>';
 
             try {
-                const response = await fetch('/api/users');
+                const response = await fetch('/api/admin/users');
                 const users = await response.json();
 
                 // Group users by position
