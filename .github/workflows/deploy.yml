@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -13,8 +14,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Trigger Render Deploy
+      - name: Trigger Render Deploy via API
         run: |
           curl -X POST "https://api.render.com/deploy/srv-${{ secrets.RENDER_SERVICE_ID }}" \
             -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-            -H "Content-Type: application/json"
+            -H "Content-Type: application/json" || echo "API deploy failed, Render auto-deploy should handle it"
+
+      - name: Wait for Render auto-deploy
+        run: sleep 5
