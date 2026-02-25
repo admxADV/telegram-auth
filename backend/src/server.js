@@ -1118,9 +1118,18 @@ const server = http.createServer(async (req, res) => {
 // ============================================
 
 async function startServer() {
+    // Логирование переменных окружения
+    console.log('=== ENV CHECK ===');
+    console.log('DATABASE_URL:', process.env.DATABASE_URL ? 'установлен (' + process.env.DATABASE_URL.substring(0, 30) + '...)' : 'НЕ УСТАНОВЛЕН');
+    console.log('TELEGRAM_BOT_TOKEN:', TELEGRAM_BOT_TOKEN ? 'установлен (' + TELEGRAM_BOT_TOKEN.substring(0, 20) + '...)' : 'НЕ УСТАНОВЛЕН');
+    console.log('ADMIN_USER_ID:', ADMIN_USER_ID);
+    console.log('=================');
+
     // Инициализация базы данных
     const dbPool = await dbModule.init();
     usePostgreSQL = !!dbPool;
+
+    console.log('[START] usePostgreSQL:', usePostgreSQL);
 
     // Загружаем данные при старте
     if (!dbPool) {
