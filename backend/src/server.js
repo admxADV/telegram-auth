@@ -143,7 +143,7 @@ function loadData() {
 // Save data to file
 function saveData() {
     try {
-        logger.info('SERVER', 'Сохранение данных и отправка бэкапа');
+        logger.info('SERVER', 'Сохранение данных');
 
         const data = {
             users: Object.fromEntries(db.users._map),
@@ -158,13 +158,6 @@ function saveData() {
         } else {
             logger.info('SERVER', 'Данные сохранены в PostgreSQL', { users: data.users ? Object.keys(data.users).length : 0 });
         }
-
-        // Send backup to admin after saving (async, не ждём завершения)
-        logger.info('SERVER', 'Вызов sendDatabaseToAdmin', { version: databaseVersion });
-        sendDatabaseToAdmin().catch(err => {
-            logger.error('SERVER', 'Ошибка в sendDatabaseToAdmin', { error: err.message });
-        });
-        logger.info('SERVER', 'saveData завершена');
     } catch (error) {
         logger.error('SERVER', 'Ошибка сохранения данных', { error: error.message });
     }
