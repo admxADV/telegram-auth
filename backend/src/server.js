@@ -590,18 +590,18 @@ function createAuthSession(userId, token) {
 /**
  * Проверяет статус авторизации по токену
  */
-function checkAuthStatus(token) {
+async function checkAuthStatus(token) {
     const request_id = generateRequestId();
-    const session = db.sessions.get(token);
+    const session = usePostgreSQL ? await dbModule.getSession(token) : db.sessions.get(token);
 
     if (session && session.authorized === true) {
-        const user = db.users.get(session.userId);
-        
+        const user = usePostgreSQL ? await dbModule.getUser(session.userId) : db.users.get(session.userId);
+
         logger.info('API', 'Auth check success', {
             request_id,
             user_id: user?.telegramId || session.userId
         });
-        
+
         return {
             success: true,
             authorized: true,
@@ -773,9 +773,9 @@ const server = http.createServer(async (req, res) => {
     // Проверка авторизации
     if (req.method === 'GET' && req.url.startsWith('/api/auth/check/')) {
         const token = req.url.split('/api/auth/check/')[1];
-        
+
         try {
-            const result = checkAuthStatus(token);
+            const result = await checkAuthStatus(token);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(result));
         } catch (error) {
