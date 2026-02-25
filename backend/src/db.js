@@ -126,7 +126,8 @@ async function updateSession(token, updates) {
     let i = 1;
 
     for (const [key, value] of Object.entries(updates)) {
-        fields.push(`${key} = $${i++}`);
+        // Экранируем имена колонок для PostgreSQL
+        fields.push(`"${key}" = $${i++}`);
         values.push(value);
     }
 
