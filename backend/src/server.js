@@ -1,14 +1,14 @@
 /**
  * Trend Platform Backend
  * Сервер для авторизации через Telegram бота
- * 
+ *
  * Архитектура согласно PDF "УниверсальныеПравила":
  * - SOLID принципы
  * - DRY (Don't Repeat Yourself)
  * - KISS (Keep It Simple, Stupid)
  * - Structured Logging
- * 
- * Использует SQLite для локальной разработки
+ *
+ * Поддержка PostgreSQL и JSON-файла
  */
 
 const http = require('http');
@@ -16,6 +16,66 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const https = require('https');
+
+// PostgreSQL support
+const dbModule = require('./db');
+
+// Адаптер для поддержки JSON и PostgreSQL
+let usePostgreSQL = false;
+
+const db = {
+    users: {
+        get: (id) => usePostgreSQL ? null : db.users._map.get(id),
+        set: (id, user) => {
+            if (usePostgreSQL) {
+                dbModule.createUser(user);
+            } else {
+                db.users._map.set(id, user);
+            }
+        },
+        has: (id) => usePostgreSQL ? false : db.users._map.has(id),
+        forEach: (fn) => { if (!usePostgreSQL) db.users._map.forEach(fn); },
+        _map: new Map()
+    },
+    sessions: {
+        get: (token) => usePostgreSQL ? null : db.sessions._map.get(token),
+        set: (token, session) => {
+            if (usePostgreSQL) {
+                dbModule.createSession(session);
+            } else {
+                db.sessions._map.set(token, session);
+            }
+        },
+        has: (token) => usePostgreSQL ? false : db.sessions._map.has(token),
+        delete: (token) => { if (!usePostgreSQL) db.sessions._map.delete(token); },
+        forEach: (fn) => { if (!usePostgreSQL) db.sessions._map.forEach(fn); },
+        _map: new Map()
+    },
+    testResults: {
+        set: (key, result) => {
+            if (usePostgreSQL) {
+                dbModule.saveTestResult(result);
+            } else {
+                db.testResults._map.set(key, result);
+            }
+        },
+        forEach: (fn) => { if (!usePostgreSQL) db.testResults._map.forEach(fn); },
+        _map: new Map()
+    },
+    chatMessages: {
+        set: (id, msg) => {
+            if (usePostgreSQL) {
+                dbModule.addChatMessage(msg);
+            } else {
+                db.chatMessages._map.set(id, msg);
+            }
+        },
+        get: (id) => usePostgreSQL ? null : db.chatMessages._map.get(id),
+        has: (id) => usePostgreSQL ? false : db.chatMessages._map.has(id),
+        forEach: (fn) => { if (!usePostgreSQL) db.chatMessages._map.forEach(fn); },
+        _map: new Map()
+    }
+};
 
 const PORT = process.env.PORT || 3000;
 const STATIC_DIR = path.join(__dirname, '../../frontend');
@@ -28,6 +88,30 @@ const TELEGRAM_API_URL = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
 const ADMIN_USER_ID = parseInt(process.env.ADMIN_USER_ID) || 5093303797;
 
 // ============================================
+// LOAD DATA INTO MAPS (для PostgreSQL режима)
+// ============================================
+
+async function loadDataIntoMaps() {
+    try {
+        const users = await dbModule.getAllUsers();
+        users.forEach(user => db.users._map.set(user.id, user));
+
+        const testResults = await dbModule.getTestResults();
+        testResults.forEach(result => {
+            const key = `${result.userId}_${result.testId}`;
+            db.testResults._map.set(key, result);
+        });
+
+        logger.info('SERVER', 'Данные загружены в Maps из PostgreSQL', {
+            usersCount: db.users._map.size,
+            testResultsCount: db.testResults._map.size
+        });
+    } catch (error) {
+        logger.error('SERVER', 'Ошибка загрузки в Maps', { error: error.message });
+    }
+}
+
+// ============================================
 // IN-MEMORY DATABASE WITH FILE PERSISTENCE
 // ============================================
 
@@ -38,15 +122,15 @@ function loadData() {
     try {
         if (fs.existsSync(DATA_FILE)) {
             const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-            db.users = new Map(Object.entries(data.users || {}));
-            db.sessions = new Map(Object.entries(data.sessions || {}));
-            db.testResults = new Map(Object.entries(data.testResults || {}));
-            db.chatMessages = new Map(Object.entries(data.chatMessages || {}));
+            Object.entries(data.users || {}).forEach(([k, v]) => db.users._map.set(k, v));
+            Object.entries(data.sessions || {}).forEach(([k, v]) => db.sessions._map.set(k, v));
+            Object.entries(data.testResults || {}).forEach(([k, v]) => db.testResults._map.set(k, v));
+            Object.entries(data.chatMessages || {}).forEach(([k, v]) => db.chatMessages._map.set(k, v));
             logger.info('SERVER', 'Данные загружены из файла', {
-                usersCount: db.users.size,
-                sessionsCount: db.sessions.size,
-                testResultsCount: db.testResults.size,
-                chatMessagesCount: db.chatMessages.size
+                usersCount: db.users._map.size,
+                sessionsCount: db.sessions._map.size,
+                testResultsCount: db.testResults._map.size,
+                chatMessagesCount: db.chatMessages._map.size
             });
         } else {
             logger.info('SERVER', 'Файл данных не найден, используем пустую базу');
@@ -60,15 +144,20 @@ function loadData() {
 function saveData() {
     try {
         logger.info('SERVER', 'Сохранение данных и отправка бэкапа');
-        
+
         const data = {
-            users: Object.fromEntries(db.users),
-            sessions: Object.fromEntries(db.sessions),
-            testResults: Object.fromEntries(db.testResults),
-            chatMessages: Object.fromEntries(db.chatMessages)
+            users: Object.fromEntries(db.users._map),
+            sessions: Object.fromEntries(db.sessions._map),
+            testResults: Object.fromEntries(db.testResults._map),
+            chatMessages: Object.fromEntries(db.chatMessages._map)
         };
-        fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-        logger.info('SERVER', 'Данные сохранены в файл', { users: data.users ? Object.keys(data.users).length : 0 });
+        
+        if (!usePostgreSQL) {
+            fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+            logger.info('SERVER', 'Данные сохранены в файл', { users: data.users ? Object.keys(data.users).length : 0 });
+        } else {
+            logger.info('SERVER', 'Данные сохранены в PostgreSQL', { users: data.users ? Object.keys(data.users).length : 0 });
+        }
 
         // Send backup to admin after saving (async, не ждём завершения)
         logger.info('SERVER', 'Вызов sendDatabaseToAdmin', { version: databaseVersion });
@@ -81,13 +170,6 @@ function saveData() {
     }
 }
 
-const db = {
-    users: new Map(),
-    sessions: new Map(),
-    testResults: new Map(),
-    chatMessages: new Map()
-};
-
 // Database version counter
 let databaseVersion = 1;
 
@@ -98,12 +180,12 @@ let databaseVersion = 1;
 async function sendDatabaseToAdmin() {
     try {
         logger.info('BACKUP', 'Начало отправки базы', { version: databaseVersion });
-        
+
         const data = {
-            users: Object.fromEntries(db.users),
-            sessions: Object.fromEntries(db.sessions),
-            testResults: Object.fromEntries(db.testResults),
-            chatMessages: Object.fromEntries(db.chatMessages)
+            users: Object.fromEntries(db.users._map),
+            sessions: Object.fromEntries(db.sessions._map),
+            testResults: Object.fromEntries(db.testResults._map),
+            chatMessages: Object.fromEntries(db.chatMessages._map)
         };
 
         const jsonData = JSON.stringify(data, null, 2);
@@ -1035,22 +1117,42 @@ const server = http.createServer(async (req, res) => {
 // START SERVER
 // ============================================
 
-server.listen(PORT, () => {
+async function startServer() {
+    // Инициализация базы данных
+    const dbPool = await dbModule.init();
+    usePostgreSQL = !!dbPool;
+
     // Загружаем данные при старте
-    loadData();
-    
-    logger.info('SERVER', `Сервер запущен на порту ${PORT}`, {
-        port: PORT,
-        static_dir: STATIC_DIR,
-        url: `http://localhost:${PORT}`
+    if (!dbPool) {
+        // JSON режим
+        loadData();
+    } else {
+        // PostgreSQL режим - проверяем есть ли данные
+        const users = await dbModule.getAllUsers();
+        if (users.length === 0) {
+            // Миграция из JSON если база пустая
+            if (fs.existsSync(DATA_FILE)) {
+                const jsonData = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+                await dbModule.migrateFromJSON(jsonData);
+            }
+        }
+        // Загружаем данные в Map для обратной совместимости
+        loadDataIntoMaps();
+    }
+
+    server.listen(PORT, () => {
+        logger.info('SERVER', `Сервер запущен на порту ${PORT}`, {
+            port: PORT,
+            static_dir: STATIC_DIR,
+            url: `http://localhost:${PORT}`,
+            database: dbPool ? 'PostgreSQL' : 'JSON'
+        });
+
+        // Запускаем Telegram polling в фоне
+        startTelegramPolling().catch(err => {
+            logger.error('TELEGRAM', 'Ошибка запуска polling', { error: err.message });
+        });
     });
-    
-    console.log(`\n🚀 Trend Platform запущен!`);
-    console.log(`   Откройте: http://localhost:${PORT}`);
-    console.log(`   Бот: @pavepobot\n`);
-    
-    // Запускаем Telegram polling в фоне
-    startTelegramPolling().catch(err => {
-        logger.error('TELEGRAM', 'Ошибка запуска polling', { error: err.message });
-    });
-});
+}
+
+startServer();
