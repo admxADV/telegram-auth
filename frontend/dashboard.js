@@ -187,6 +187,13 @@ const TESTS = [
                 ]
             },
             {
+                id: 'systems_custom',
+                text: 'Напишите свои системы',
+                type: 'text',
+                placeholder: 'Например: Битрикс24, Jira, Notion',
+                showWhen: { field: 'systems', value: 'custom' }
+            },
+            {
                 id: 'daily_routine',
                 text: 'Распишите типичный рабочий день',
                 description: 'Опишите максимально подробно ваш рабочий процесс: откуда к вам поступают задачи/данные (от кого или из какой системы), что вы с ними делаете вручную, куда вносите результат и кому передаете дальше. Какие отчеты, справки или таблицы вы обязаны заполнять? С представителями каких отделов вы контактируете ежедневно/еженедельно и по какому поводу?',
@@ -799,7 +806,9 @@ function renderTestForm(test) {
     if (currentTest.id === 1) {
         const positionSelect = document.querySelector('select[data-question="position_select"]');
         const positionCustom = document.querySelector('input[data-question="position_custom"]');
-        
+        const systemsMultiselect = document.querySelectorAll('input[data-question="systems"]');
+        const systemsCustom = document.querySelector('input[data-question="systems_custom"]');
+
         if (positionSelect && positionCustom) {
             positionSelect.addEventListener('change', function() {
                 if (this.value === 'other') {
@@ -809,6 +818,21 @@ function renderTestForm(test) {
                     positionCustom.parentElement.style.display = 'none';
                     positionCustom.required = false;
                 }
+            });
+        }
+
+        if (systemsMultiselect && systemsCustom) {
+            systemsMultiselect.forEach(cb => {
+                cb.addEventListener('change', function() {
+                    const customChecked = Array.from(systemsMultiselect).some(cb => cb.value === 'custom' && cb.checked);
+                    if (customChecked) {
+                        systemsCustom.parentElement.style.display = 'block';
+                        systemsCustom.required = true;
+                    } else {
+                        systemsCustom.parentElement.style.display = 'none';
+                        systemsCustom.required = false;
+                    }
+                });
             });
         }
     }

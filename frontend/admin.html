@@ -949,10 +949,39 @@
                 else if (questionId === 'position_select' && answer === 'other' && answers.position_custom) {
                     answerText = answers.position_custom + ' (свой вариант)';
                 }
+                // Если это кастомные системы - показываем реальное значение
+                else if (questionId === 'systems_custom' && answer) {
+                    answerText = answer;
+                }
+                // Если это выбор систем и выбрано "custom" - проверяем есть ли кастомное значение
+                else if (questionId === 'systems' && Array.isArray(answer) && answer.includes('custom') && answers.systems_custom) {
+                    // Заменяем 'custom' на реальное значение
+                    const customIndex = answer.indexOf('custom');
+                    if (customIndex > -1) {
+                        answer = [...answer];
+                        answer[customIndex] = answers.systems_custom + ' (свои варианты)';
+                    }
+                    answerText = answer.map(val => {
+                        if (question && question.options) {
+                            const option = question.options.find(o => o.value === val);
+                            return option ? option.label : val;
+                        }
+                        return val;
+                    }).join(', ');
+                }
                 // Если есть options - ищем label
                 else if (question && question.options) {
-                    const option = question.options.find(o => o.value === answer);
-                    answerText = option ? option.label : (answer || 'нет ответа');
+                    if (Array.isArray(answer)) {
+                        // Мультиселект
+                        answerText = answer.map(val => {
+                            const option = question.options.find(o => o.value === val);
+                            return option ? option.label : val;
+                        }).join(', ');
+                    } else {
+                        // Селект или радио
+                        const option = question.options.find(o => o.value === answer);
+                        answerText = option ? option.label : (answer || 'нет ответа');
+                    }
                 }
 
                 return `<p><strong>"${questionText}"</strong>: ${answerText || 'нет ответа'}</p>`;
