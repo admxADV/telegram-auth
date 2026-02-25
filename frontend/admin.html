@@ -927,24 +927,34 @@
 
         function formatAnswers(answers, testId) {
             if (!answers) return 'Нет ответов';
-            
+
             const entries = Object.entries(answers);
             if (entries.length === 0) return 'Нет ответов';
-            
+
             const questions = TEST_QUESTIONS[testId] || [];
             const questionMap = {};
             questions.forEach(q => { questionMap[q.id] = q; });
-            
+
             return entries.map(([questionId, answer]) => {
                 const question = questionMap[questionId];
                 const questionText = question ? question.text : 'Вопрос ' + questionId;
-                
+
                 let answerText = answer;
-                if (question && question.options) {
+                
+                // Если это кастомная должность - показываем реальное значение
+                if (questionId === 'position_custom' && answer) {
+                    answerText = answer;
+                }
+                // Если это выбор должности и выбрано "other" - проверяем есть ли кастомное значение
+                else if (questionId === 'position_select' && answer === 'other' && answers.position_custom) {
+                    answerText = answers.position_custom + ' (свой вариант)';
+                }
+                // Если есть options - ищем label
+                else if (question && question.options) {
                     const option = question.options.find(o => o.value === answer);
                     answerText = option ? option.label : (answer || 'нет ответа');
                 }
-                
+
                 return `<p><strong>"${questionText}"</strong>: ${answerText || 'нет ответа'}</p>`;
             }).join('');
         }
