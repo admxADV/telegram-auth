@@ -1043,87 +1043,57 @@ const server = http.createServer(async (req, res) => {
 
     // Получение всех пользователей и их результатов (для админа)
     if (req.method === 'GET' && req.url === '/api/admin/users') {
-        // Проверка авторизации через заголовок или cookie - временно отключено для тестирования
-        // const authHeader = req.headers['authorization'] || req.headers['cookie'];
-        // const allowedAdminIds = ['5093303797', '7579436'];
-        // 
-        // // Проверяем авторизован ли пользователь
-        // let isAuthorized = false;
-        // let userId = null;
-        // 
-        // if (authHeader) {
-        //     // Пробуем получить session из заголовка
-        //     const sessionMatch = authHeader.match(/auth_session=([^;]+)/);
-        //     if (sessionMatch) {
-        //         const session = sessionMatch[1];
-        //         const sessionData = db.sessions.get(session);
-        //         if (sessionData) {
-        //             userId = String(sessionData.telegramId);
-        //             if (allowedAdminIds.includes(userId)) {
-        //                 isAuthorized = true;
-        //             }
-        //         }
-        //     }
-        // }
-        // 
-        // if (!isAuthorized) {
-        //     res.writeHead(403, { 'Content-Type': 'application/json' });
-        //     res.end(JSON.stringify({ success: false, error: 'Доступ запрещен' }));
-        //     return;
-        // }
-        
         const users = [];
-        
+
+        // Получаем пользователей из PostgreSQL или JSON
+        const allUsers = usePostgreSQL ? await dbModule.getAllUsers() : Array.from(db.users._map.values());
+
         // Debug: логируем содержимое базы данных
         logger.info('DEBUG', 'Админ API - данные в БД', {
-            usersCount: db.users.size,
-            testResultsCount: db.testResults.size,
-            usersKeys: Array.from(db.users.keys()),
-            testResultsKeys: Array.from(db.testResults.keys())
+            usersCount: allUsers.length,
+            isPostgreSQL: usePostgreSQL
         });
-        
-        db.users.forEach((user, id) => {
+
+        for (const user of allUsers) {
             const userResults = [];
-            db.testResults.forEach((result, key) => {
-                // Сравниваем с telegramId пользователя
-                if (String(result.userId) === String(user.telegramId)) {
-                    userResults.push({
-                        testId: result.testId,
-                        progress: result.progress,
-                        answers: result.answers,
-                        completedAt: result.completedAt
-                    });
-                }
+            
+            // Получаем результаты тестов
+            const testResults = usePostgreSQL ? await dbModule.getTestResults(user.telegramId) : Array.from(db.testResults._map.values()).filter(r => String(r.userId) === String(user.telegramId));
+            
+            testResults.forEach(result => {
+                userResults.push({
+                    testId: result.testId,
+                    progress: result.progress,
+                    answers: result.answers,
+                    completedAt: result.completedAt
+                });
             });
-            
+
             // Count unanswered messages for this user
-            // New messages = messages from user (sent) that came AFTER the last admin reply (received)
             let lastReceivedTimestamp = 0;
-            const userMessages = [];
+            const userMessages = usePostgreSQL ? await dbModule.getChatMessages(user.telegramId) : Array.from(db.chatMessages._map.values()).filter(msg => String(msg.userId) === String(user.telegramId));
             
-            db.chatMessages.forEach((msg, key) => {
-                if (String(msg.userId) === String(user.telegramId)) {
-                    if (msg.type === 'sent') {
-                        userMessages.push(msg);
-                    } else if (msg.type === 'received') {
-                        // Track the latest admin reply timestamp
-                        const msgTime = new Date(msg.timestamp).getTime();
-                        if (msgTime > lastReceivedTimestamp) {
-                            lastReceivedTimestamp = msgTime;
-                        }
+            // Track the latest admin reply timestamp
+            userMessages.forEach(msg => {
+                if (msg.type === 'received') {
+                    const msgTime = new Date(msg.timestamp).getTime();
+                    if (msgTime > lastReceivedTimestamp) {
+                        lastReceivedTimestamp = msgTime;
                     }
                 }
             });
-            
+
             // Count messages sent after the last admin reply
             let unreadCount = 0;
             userMessages.forEach(msg => {
-                const msgTime = new Date(msg.timestamp).getTime();
-                if (msgTime > lastReceivedTimestamp) {
-                    unreadCount++;
+                if (msg.type === 'sent') {
+                    const msgTime = new Date(msg.timestamp).getTime();
+                    if (msgTime > lastReceivedTimestamp) {
+                        unreadCount++;
+                    }
                 }
             });
-            
+
             users.push({
                 id: user.id,
                 telegramId: user.telegramId,
@@ -1134,7 +1104,7 @@ const server = http.createServer(async (req, res) => {
                 results: userResults,
                 unreadCount: unreadCount
             });
-        });
+        }
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(users));
