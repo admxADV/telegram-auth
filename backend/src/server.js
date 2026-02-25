@@ -411,36 +411,52 @@ async function handleTelegramUpdate(update) {
     
     // Проверяем /start команду с токеном
     if (text.startsWith('/start ')) {
-        const authToken = text.substring(7).trim(); // Убираем "/start " 
-        
+        const authToken = text.substring(7).trim(); // Убираем "/start "
+
         if (authToken.startsWith('auth_')) {
             // Проверяем, что сессия существует
-            const session = db.sessions.get(authToken);
+            const session = usePostgreSQL ? await dbModule.getSession(authToken) : db.sessions.get(authToken);
             if (session) {
                 // Авторизуем пользователя
                 const userId = 'user_' + user.id;
-                db.users.set(userId, {
-                    id: userId,
-                    telegramId: user.id,
-                    username: user.username,
-                    firstName: user.first_name,
-                    lastName: user.last_name,
-                    createdAt: new Date().toISOString()
-                });
-                
+                if (usePostgreSQL) {
+                    await dbModule.createUser({
+                        id: userId,
+                        telegramId: user.id,
+                        username: user.username,
+                        firstName: user.first_name,
+                        lastName: user.last_name,
+                        createdAt: new Date().toISOString()
+                    });
+                    await dbModule.updateSession(authToken, {
+                        authorized: true,
+                        userId: userId,
+                        telegramId: user.id
+                    });
+                } else {
+                    db.users.set(userId, {
+                        id: userId,
+                        telegramId: user.id,
+                        username: user.username,
+                        firstName: user.first_name,
+                        lastName: user.last_name,
+                        createdAt: new Date().toISOString()
+                    });
+
+                    session.authorized = true;
+                    session.userId = userId;
+                    session.telegramId = user.id; // Добавляем telegramId для проверки админа
+                    db.sessions.set(authToken, session);
+                }
+
                 saveData(); // Сохраняем в файл
-                
-                session.authorized = true;
-                session.userId = userId;
-                session.telegramId = user.id; // Добавляем telegramId для проверки админа
-                db.sessions.set(authToken, session);
-                
+
                 // Отправляем подтверждение пользователю
                 await telegramRequest('sendMessage', {
                     chat_id: chatId,
                     text: '✅ Авторизация успешна! Теперь вернитесь на сайт и нажмите "Проверить".'
                 });
-                
+
                 logger.info('TELEGRAM', 'Пользователь авторизован', {
                     chat_id: chatId,
                     telegram_id: user.id,
@@ -461,26 +477,46 @@ async function handleTelegramUpdate(update) {
     } else if (text === '/start') {
         // Создаем или обновляем пользователя
         const userId = 'user_' + user.id;
-        const existingUser = db.users.get(userId);
         
-        if (!existingUser) {
-            // Новый пользователь - регистрируем
-            db.users.set(userId, {
-                id: userId,
-                telegramId: user.id,
-                username: user.username,
-                firstName: user.first_name,
-                lastName: user.last_name,
-                createdAt: new Date().toISOString()
-            });
-            
-            saveData(); // Сохраняем в файл
-            
-            logger.info('TELEGRAM', 'Новый пользователь зарегистрирован', {
-                chat_id: chatId,
-                telegram_id: user.id,
-                username: user.username
-            });
+        if (usePostgreSQL) {
+            const existingUser = await dbModule.getUser(userId);
+            if (!existingUser) {
+                await dbModule.createUser({
+                    id: userId,
+                    telegramId: user.id,
+                    username: user.username,
+                    firstName: user.first_name,
+                    lastName: user.last_name,
+                    createdAt: new Date().toISOString()
+                });
+                logger.info('TELEGRAM', 'Новый пользователь зарегистрирован', {
+                    chat_id: chatId,
+                    telegram_id: user.id,
+                    username: user.username
+                });
+            }
+        } else {
+            const existingUser = db.users.get(userId);
+
+            if (!existingUser) {
+                // Новый пользователь - регистрируем
+                db.users.set(userId, {
+                    id: userId,
+                    telegramId: user.id,
+                    username: user.username,
+                    firstName: user.first_name,
+                    lastName: user.last_name,
+                    createdAt: new Date().toISOString()
+                });
+
+                saveData(); // Сохраняем в файл
+
+                logger.info('TELEGRAM', 'Новый пользователь зарегистрирован', {
+                    chat_id: chatId,
+                    telegram_id: user.id,
+                    username: user.username
+                });
+            }
         }
         
         await telegramRequest('sendMessage', {
