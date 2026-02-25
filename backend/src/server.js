@@ -35,6 +35,7 @@ const db = {
         },
         has: (id) => usePostgreSQL ? false : db.users._map.has(id),
         forEach: (fn) => { if (!usePostgreSQL) db.users._map.forEach(fn); },
+        keys: () => usePostgreSQL ? [] : db.users._map.keys(),
         _map: new Map()
     },
     sessions: {
@@ -49,6 +50,7 @@ const db = {
         has: (token) => usePostgreSQL ? false : db.sessions._map.has(token),
         delete: (token) => { if (!usePostgreSQL) db.sessions._map.delete(token); },
         forEach: (fn) => { if (!usePostgreSQL) db.sessions._map.forEach(fn); },
+        keys: () => usePostgreSQL ? [] : db.sessions._map.keys(),
         _map: new Map()
     },
     testResults: {
@@ -60,6 +62,7 @@ const db = {
             }
         },
         forEach: (fn) => { if (!usePostgreSQL) db.testResults._map.forEach(fn); },
+        keys: () => usePostgreSQL ? [] : db.testResults._map.keys(),
         _map: new Map()
     },
     chatMessages: {
@@ -73,6 +76,7 @@ const db = {
         get: (id) => usePostgreSQL ? null : db.chatMessages._map.get(id),
         has: (id) => usePostgreSQL ? false : db.chatMessages._map.has(id),
         forEach: (fn) => { if (!usePostgreSQL) db.chatMessages._map.forEach(fn); },
+        keys: () => usePostgreSQL ? [] : db.chatMessages._map.keys(),
         _map: new Map()
     }
 };
