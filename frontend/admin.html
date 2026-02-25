@@ -1104,10 +1104,19 @@
 
                 // Group users by position
                 const positions = {};
+                const customPositions = {}; // Храним кастомные названия
+                
                 users.forEach(user => {
                     const test1 = user.results && user.results[0];
                     if (test1 && test1.answers) {
-                        const position = test1.answers.position_select || test1.answers.position || 'other';
+                        let position = test1.answers.position_select || test1.answers.position || 'other';
+                        
+                        // Если пользователь ввёл свой вариант
+                        if (position === 'other' && test1.answers.position_custom) {
+                            position = 'custom_' + user.telegramId; // Уникальный ключ для кастомного значения
+                            customPositions[position] = test1.answers.position_custom; // Сохраняем текст
+                        }
+                        
                         if (!positions[position]) {
                             positions[position] = [];
                         }
@@ -1140,7 +1149,8 @@
 
                 let html = '';
                 for (const [position, users] of Object.entries(positions)) {
-                    const name = positionNames[position] || position;
+                    // Если есть кастомное название — используем его
+                    const name = customPositions[position] || positionNames[position] || position;
                     html += renderPositionCard(position, name, users);
                 }
 

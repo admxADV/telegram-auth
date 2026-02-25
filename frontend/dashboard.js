@@ -167,6 +167,13 @@ const TESTS = [
                 ]
             },
             {
+                id: 'position_custom',
+                text: 'Напишите вашу должность',
+                type: 'text',
+                placeholder: 'Например: Ведущий специалист по продажам',
+                showWhen: { field: 'position_select', value: 'other' }
+            },
+            {
                 id: 'systems',
                 text: 'Какими системами пользуетесь ежедневно? В том числе и бумажные журналы',
                 type: 'multiselect',
@@ -765,7 +772,7 @@ function renderTestForm(test) {
         }
         
         questionsHTML += `
-            <div class="question">
+            <div class="question" ${question.showWhen ? `data-show-when="${question.showWhen.field}" data-show-value="${question.showWhen.value}" style="display:none;"` : ''}>
                 <div class="question-number">Вопрос ${index + 1}</div>
                 <div class="question-text">${question.text}</div>
                 ${question.description ? `<div class="question-description">${question.description}</div>` : ''}
@@ -773,7 +780,7 @@ function renderTestForm(test) {
             </div>
         `;
     });
-    
+
     mainContent.innerHTML = `
         <div class="content-header">
             <h1>${test.title}</h1>
@@ -787,6 +794,24 @@ function renderTestForm(test) {
             </div>
         </div>
     `;
+
+    // Add logic for showWhen fields
+    if (currentTest.id === 1) {
+        const positionSelect = document.querySelector('select[data-question="position_select"]');
+        const positionCustom = document.querySelector('input[data-question="position_custom"]');
+        
+        if (positionSelect && positionCustom) {
+            positionSelect.addEventListener('change', function() {
+                if (this.value === 'other') {
+                    positionCustom.parentElement.style.display = 'block';
+                    positionCustom.required = true;
+                } else {
+                    positionCustom.parentElement.style.display = 'none';
+                    positionCustom.required = false;
+                }
+            });
+        }
+    }
 
     // Add event listeners for options
     document.querySelectorAll('.option').forEach(option => {
