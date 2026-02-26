@@ -1008,7 +1008,9 @@
             const entries = Object.entries(answers);
             if (entries.length === 0) return 'Нет ответов';
 
-            const questions = TEST_QUESTIONS[testId] || [];
+            // Приводим testId к строке для совместимости
+            const testIdStr = String(testId);
+            const questions = TEST_QUESTIONS[testIdStr] || TEST_QUESTIONS[testId] || [];
             const questionMap = {};
             questions.forEach(q => { questionMap[q.id] = q; });
 
