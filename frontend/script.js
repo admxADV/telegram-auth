@@ -88,9 +88,18 @@ async function handleAuthClick(event) {
     // Начинаем сессию на сервере
     await startAuthSession(sessionToken);
 
-    // Открываем Telegram
+    // Открываем Telegram - используем window.location вместо window.open (Safari блокирует popup)
     const telegramUrl = createTelegramDeepLink(sessionToken);
-    window.open(telegramUrl, '_blank');
+    
+    // Пробуем открыть в новой вкладке
+    const newWindow = window.open(telegramUrl, '_blank');
+    
+    // Если Safari заблокировал - открываем в текущей вкладке
+    if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
+        // Показываем инструкцию пользователю
+        button.innerHTML = '<span class="loading">👉 <a href="' + telegramUrl + '" target="_blank" rel="noopener noreferrer">Откройте Telegram вручную</a></span>';
+        button.disabled = false;
+    }
 
     // Начинаем проверку статуса
     let attempts = 0;

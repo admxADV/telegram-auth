@@ -629,10 +629,10 @@ async function loadTests() {
                 <span class="progress-text">${test.progress}%</span>
             </div>
         `;
-        
+
         if (isLocked) {
             testItem.addEventListener('click', () => {
-                alert('Сначала пройдите предыдущий тест!');
+                alert('Тест в разработке');
             });
         } else {
             testItem.addEventListener('click', () => selectTest(test));
