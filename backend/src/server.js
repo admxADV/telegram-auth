@@ -916,6 +916,7 @@ const server = http.createServer(async (req, res) => {
         const url = new URL(req.url, `http://localhost:${PORT}`);
         const userId = url.searchParams.get('userId');
         const testId = url.searchParams.get('testId');
+        const request_id = generateRequestId();
 
         if (!userId) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -926,6 +927,13 @@ const server = http.createServer(async (req, res) => {
         try {
             const resultKey = `${userId}_${testId}`;
             const result = db.testResults.get(resultKey);
+
+            logger.info('API', 'Получены результаты теста', {
+                request_id,
+                userId,
+                testId,
+                found: !!result
+            });
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
