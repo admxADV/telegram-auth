@@ -505,10 +505,13 @@ function logout() {
  */
 async function saveToServer(testId, answers, progress) {
     const userId = sessionStorage.getItem('user_id');
-    if (!userId) return;
-    
+    if (!userId) {
+        console.error('[saveToServer] userId не найден в sessionStorage');
+        return;
+    }
+
     try {
-        await fetch('/api/tests/save', {
+        const response = await fetch('/api/tests/save', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -518,8 +521,18 @@ async function saveToServer(testId, answers, progress) {
                 progress
             })
         });
+
+        if (!response.ok) {
+            console.error('[saveToServer] Ошибка сервера:', response.status);
+            return;
+        }
+
+        const result = await response.json();
+        if (!result.success) {
+            console.error('[saveToServer] Сервер вернул ошибку:', result.error);
+        }
     } catch (error) {
-        console.error('Error saving to server:', error);
+        console.error('[saveToServer] Ошибка сети:', error);
     }
 }
 
