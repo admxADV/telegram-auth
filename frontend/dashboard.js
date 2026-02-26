@@ -946,15 +946,30 @@ function saveTest() {
     }
     
     // Calculate progress
+    // Only count required questions (not conditional ones like position_custom, systems_custom)
     let answered = 0;
+    let totalQuestions = 0;
+    
     currentTest.questions.forEach(question => {
+        // Skip conditional questions from total count
+        if (question.showWhen) return;
+        
+        totalQuestions++;
         const answer = answers[question.id];
-        if (answer && (typeof answer === 'string' ? answer.trim() : answer.length > 0)) {
-            answered++;
+        
+        // Check if answer is filled
+        if (answer) {
+            if (Array.isArray(answer)) {
+                // Multiselect - must have at least one option
+                if (answer.length > 0) answered++;
+            } else if (typeof answer === 'string') {
+                // Text/select/radio - must not be empty
+                if (answer.trim() !== '') answered++;
+            }
         }
     });
-    
-    const progress = Math.round((answered / currentTest.questions.length) * 100);
+
+    const progress = totalQuestions > 0 ? Math.round((answered / totalQuestions) * 100) : 0;
     
     // Save progress
     const allProgress = JSON.parse(localStorage.getItem('test_progress') || '{}');
