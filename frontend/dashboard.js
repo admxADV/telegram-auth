@@ -1033,8 +1033,23 @@ function saveTest() {
     // Update UI
     currentTest.progress = progress;
     loadTests();
-    
-    alert('Ответы сохранены! Прогресс: ' + progress + '%');
+
+    showToast('Ответы сохранены! Прогресс: ' + progress + '%');
+}
+
+/**
+ * Show toast notification
+ */
+function showToast(message) {
+    const toast = document.getElementById('toast');
+    if (!toast) return;
+
+    toast.textContent = message;
+    toast.classList.add('show');
+
+    setTimeout(() => {
+        toast.classList.remove('show');
+    }, 2000);
 }
 
 /**
