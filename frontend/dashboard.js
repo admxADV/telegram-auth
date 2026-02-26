@@ -1049,7 +1049,7 @@ function showToast(message) {
 
     setTimeout(() => {
         toast.classList.remove('show');
-    }, 2000);
+    }, 2500);
 }
 
 /**

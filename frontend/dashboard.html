@@ -742,17 +742,17 @@
         /* Toast notification */
         .toast {
             position: fixed;
-            bottom: 20px;
-            right: 20px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) translateY(20px);
             background: #10b981;
             color: white;
-            padding: 12px 24px;
+            padding: 16px 32px;
             border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            font-size: 14px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+            font-size: 16px;
             font-weight: 500;
             opacity: 0;
-            transform: translateY(20px);
             transition: all 0.3s ease;
             z-index: 10000;
             pointer-events: none;
@@ -760,7 +760,7 @@
 
         .toast.show {
             opacity: 1;
-            transform: translateY(0);
+            transform: translate(-50%, -50%) translateY(0);
         }
     </style>
 </head>
