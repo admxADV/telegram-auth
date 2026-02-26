@@ -911,6 +911,38 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // Получение результатов теста пользователем
+    if (req.method === 'GET' && req.url.startsWith('/api/tests/results')) {
+        const url = new URL(req.url, `http://localhost:${PORT}`);
+        const userId = url.searchParams.get('userId');
+        const testId = url.searchParams.get('testId');
+
+        if (!userId) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'userId required' }));
+            return;
+        }
+
+        try {
+            const resultKey = `${userId}_${testId}`;
+            const result = db.testResults.get(resultKey);
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                success: true,
+                result: result || null
+            }));
+        } catch (error) {
+            logger.error('API', 'Ошибка получения результатов теста', {
+                request_id,
+                error: error.message
+            });
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Ошибка сервера' }));
+        }
+        return;
+    }
+
     // Chat - получение сообщений пользователя
     if (req.method === 'GET' && req.url.startsWith('/api/chat/messages')) {
         const url = new URL(req.url, `http://localhost:${PORT}`);

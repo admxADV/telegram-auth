@@ -883,29 +883,67 @@ function renderTestForm(test) {
 }
 
 /**
- * Load saved answers
+ * Load saved answers from localStorage or server
  */
 function loadSavedAnswers(testId) {
+    const userId = sessionStorage.getItem('user_id');
+    
+    // Сначала пробуем загрузить с сервера
+    if (userId) {
+        fetch(`/api/tests/results?userId=${userId}&testId=${testId}`)
+            .then(response => {
+                if (!response.ok) return null;
+                return response.json();
+            })
+            .then(data => {
+                if (data && data.success && data.result && data.result.answers) {
+                    applyAnswers(data.result.answers);
+                    console.log('[loadSavedAnswers] Загружено с сервера');
+                } else {
+                    // Если с сервера не получилось, берём из localStorage
+                    loadFromLocalStorage(testId);
+                }
+            })
+            .catch(error => {
+                console.error('[loadSavedAnswers] Ошибка загрузки с сервера:', error);
+                loadFromLocalStorage(testId);
+            });
+    } else {
+        loadFromLocalStorage(testId);
+    }
+}
+
+/**
+ * Load answers from localStorage
+ */
+function loadFromLocalStorage(testId) {
     const saved = localStorage.getItem('test_answers_' + testId);
-    if (!saved) return;
-    
-    const answers = JSON.parse(saved);
-    
+    if (saved) {
+        const answers = JSON.parse(saved);
+        applyAnswers(answers);
+        console.log('[loadSavedAnswers] Загружено из localStorage');
+    }
+}
+
+/**
+ * Apply answers to form
+ */
+function applyAnswers(answers) {
     Object.keys(answers).forEach(questionId => {
         const value = answers[questionId];
-        
+
         // Select
         const select = document.querySelector(`select[data-question="${questionId}"]`);
         if (select) {
             select.value = value;
         }
-        
+
         // Text / Textarea
         const textInput = document.querySelector(`input[data-question="${questionId}"], textarea[data-question="${questionId}"]`);
         if (textInput) {
             textInput.value = value;
         }
-        
+
         // Radio / Checkbox
         if (Array.isArray(value)) {
             value.forEach(v => {
