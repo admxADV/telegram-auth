@@ -1010,12 +1010,20 @@
 
             // Приводим testId к строке для совместимости
             const testIdStr = String(testId);
+            console.log('[formatAnswers] testId:', testId, 'testIdStr:', testIdStr);
+            console.log('[formatAnswers] TEST_QUESTIONS keys:', Object.keys(TEST_QUESTIONS));
+            console.log('[formatAnswers] TEST_QUESTIONS[testIdStr]:', TEST_QUESTIONS[testIdStr]);
+            console.log('[formatAnswers] TEST_QUESTIONS[testId]:', TEST_QUESTIONS[testId]);
+            
             const questions = TEST_QUESTIONS[testIdStr] || TEST_QUESTIONS[testId] || [];
+            console.log('[formatAnswers] questions:', questions);
             const questionMap = {};
             questions.forEach(q => { questionMap[q.id] = q; });
+            console.log('[formatAnswers] questionMap:', questionMap);
 
             return entries.map(([questionId, answer]) => {
                 const question = questionMap[questionId];
+                console.log('[formatAnswers] questionId:', questionId, 'question:', question);
                 const questionText = question ? question.text : 'Вопрос ' + questionId;
 
                 let answerText = answer;
