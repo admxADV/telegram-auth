@@ -411,7 +411,14 @@ async function handleTelegramUpdate(update) {
     
     // Проверяем /start команду с токеном
     if (text.startsWith('/start ')) {
-        const authToken = text.substring(7).trim(); // Убираем "/start "
+        let authToken = text.substring(7).trim(); // Убираем "/start "
+        
+        // Декодируем токен (если был закодирован)
+        try {
+            authToken = decodeURIComponent(authToken);
+        } catch (e) {
+            // Если декодирование не удалось, используем как есть
+        }
 
         if (authToken.startsWith('auth_')) {
             // Проверяем, что сессия существует

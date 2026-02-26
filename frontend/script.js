@@ -23,7 +23,9 @@ function generateSessionToken() {
  * Создает URL для Telegram
  */
 function createTelegramDeepLink(sessionToken) {
-    return 'https://t.me/' + TELEGRAM_BOT_USERNAME + '?start=' + sessionToken;
+    // Кодируем токен для безопасности URL
+    const encodedToken = encodeURIComponent(sessionToken);
+    return 'https://t.me/' + TELEGRAM_BOT_USERNAME + '?start=' + encodedToken;
 }
 
 /**
